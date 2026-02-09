@@ -1,0 +1,66 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/identity-core",
+  "crates/identity-crypto",
+  "crates/identity-policy",
+  "crates/identity-storage",
+  "crates/identity-server",
+  "crates/identity-cli",
+  "crates/identity-sdk",
+  "crates/identity-web",
+  "crates/test-support",
+]
+default-members = [
+  "crates/identity-core",
+  "crates/identity-crypto",
+  "crates/identity-policy",
+  "crates/identity-storage",
+  "crates/identity-server",
+  "crates/identity-cli",
+  "crates/identity-sdk",
+  "crates/test-support",
+]
+
+[workspace.package]
+edition = "2021"
+license = "Apache-2.0"
+version = "0.1.0"
+rust-version = "1.78"
+
+[workspace.dependencies]
+anyhow = "1"
+async-trait = "0.1"
+axum = "0.8"
+base64ct = { version = "1", features = ["alloc"] }
+chrono = { version = "0.4", features = ["serde", "clock"] }
+clap = { version = "4", features = ["derive"] }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+futures = "0.3"
+hex = "0.4"
+http = "1"
+josekit = "0.10"
+multibase = "0.9"
+rand = "0.8"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+schemars = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_jcs = "0.1"
+serde_json = "1"
+sha2 = "0.10"
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "json"] }
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+url = { version = "2", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = "0.3"
+urlencoding = "2"
+insta = "1"
+proptest = "1"

@@ -1,0 +1,80 @@
+name: vps-rolling-deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binary
+        run: cargo build --release -p identity-server
+
+      - name: Test server crate
+        run: cargo test -p identity-server
+
+      - name: Prepare deploy bundle
+        run: |
+          mkdir -p dist
+          cp target/release/identity-server dist/identity-server
+          cp deploy/systemd/identity-registry@.service dist/identity-registry@.service
+          cp deploy/env/a.env dist/a.env
+          cp deploy/env/b.env dist/b.env
+          cp deploy/caddy/Caddyfile.identity-registry dist/Caddyfile.identity-registry
+          cp scripts/remote_rolling_deploy.sh dist/remote_rolling_deploy.sh
+          chmod +x dist/remote_rolling_deploy.sh
+
+      - name: Upload bundle via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || '22' }}
+          source: "dist/*"
+          target: "~/botid-deploy"
+          strip_components: 1
+
+      - name: Install config + rolling restart via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          MANAGE_CADDY_CONFIG: ${{ secrets.MANAGE_CADDY_CONFIG || 'false' }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || '22' }}
+          envs: MANAGE_CADDY_CONFIG
+          script: |
+            set -euo pipefail
+            DEPLOY_DIR="$HOME/botid-deploy"
+
+            sudo install -Dm644 "$DEPLOY_DIR/identity-registry@.service" /etc/systemd/system/identity-registry@.service
+            sudo install -Dm644 "$DEPLOY_DIR/a.env" /etc/identity-registry/a.env
+            sudo install -Dm644 "$DEPLOY_DIR/b.env" /etc/identity-registry/b.env
+            sudo install -Dm755 "$DEPLOY_DIR/remote_rolling_deploy.sh" /usr/local/bin/remote_rolling_deploy.sh
+
+            if [[ "${MANAGE_CADDY_CONFIG:-false}" == "true" ]] && command -v caddy >/dev/null 2>&1; then
+              sudo mkdir -p /etc/caddy/sites-enabled
+              sudo install -Dm644 "$DEPLOY_DIR/Caddyfile.identity-registry" /etc/caddy/sites-enabled/botnet.pub.caddy
+              if ! sudo grep -q '^import /etc/caddy/sites-enabled/\*\.caddy$' /etc/caddy/Caddyfile; then
+                echo 'import /etc/caddy/sites-enabled/*.caddy' | sudo tee -a /etc/caddy/Caddyfile >/dev/null
+              fi
+              sudo caddy validate --config /etc/caddy/Caddyfile
+              sudo systemctl reload caddy
+            fi
+
+            sudo systemctl daemon-reload
+            sudo systemctl enable identity-registry@a identity-registry@b
+            sudo /usr/local/bin/remote_rolling_deploy.sh "$DEPLOY_DIR/identity-server"
+
+            rm -rf "$DEPLOY_DIR"

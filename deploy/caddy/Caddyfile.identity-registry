@@ -1,0 +1,10 @@
+# Set this hostname for your registry service.
+# You can replace the value below in-repo, or set env var IDENTITY_REGISTRY_SITE for Caddy.
+{$IDENTITY_REGISTRY_SITE:botnet.pub} {
+    reverse_proxy 127.0.0.1:8081 127.0.0.1:8082 {
+        lb_policy round_robin
+        health_uri /health
+        health_interval 5s
+        health_timeout 2s
+    }
+}
