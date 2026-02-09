@@ -2,25 +2,40 @@ name: vps-rolling-deploy
 
 on:
   workflow_dispatch:
-  push:
+  workflow_run:
+    workflows: ["ci"]
+    types: [completed]
     branches: ["main"]
+
+concurrency:
+  group: vps-rolling-deploy-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build release binary
-        run: cargo build --release -p identity-server
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: botnet-pub-rust
+          add-job-id-key: "false"
+          workspaces: |
+            . -> target
+          cache-on-failure: true
 
-      - name: Test server crate
-        run: cargo test -p identity-server
+      - name: Build release binary
+        run: cargo build --release -p identity-server --locked
 
       - name: Prepare deploy bundle
         run: |
@@ -39,6 +54,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
           port: ${{ secrets.VPS_PORT || '22' }}
           source: "dist/*"
           target: "~/botid-deploy"
@@ -52,6 +68,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
           port: ${{ secrets.VPS_PORT || '22' }}
           envs: MANAGE_CADDY_CONFIG
           script: |
