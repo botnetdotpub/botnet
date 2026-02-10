@@ -11,6 +11,10 @@ concurrency:
   group: vps-rolling-deploy-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  actions: read
+  contents: read
+
 jobs:
   deploy:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
@@ -22,10 +26,21 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
-      - name: Setup Rust
+      - name: Download release artifact from CI
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: identity-server-release
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist
+
+      - name: Setup Rust (manual dispatch fallback)
+        if: github.event_name == 'workflow_dispatch'
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Rust build artifacts
+      - name: Cache Rust build artifacts (manual dispatch fallback)
+        if: github.event_name == 'workflow_dispatch'
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: botnet-pub-rust
@@ -34,13 +49,17 @@ jobs:
             . -> target
           cache-on-failure: true
 
-      - name: Build release binary
+      - name: Build release binary (manual dispatch fallback)
+        if: github.event_name == 'workflow_dispatch'
         run: cargo build --release -p identity-server --locked
 
       - name: Prepare deploy bundle
         run: |
           mkdir -p dist
-          cp target/release/identity-server dist/identity-server
+          if [[ ! -f dist/identity-server ]]; then
+            cp target/release/identity-server dist/identity-server
+          fi
+          chmod +x dist/identity-server
           cp deploy/systemd/identity-registry@.service dist/identity-registry@.service
           cp deploy/env/a.env dist/a.env
           cp deploy/env/b.env dist/b.env
@@ -79,6 +98,7 @@ jobs:
             sudo install -Dm644 "$DEPLOY_DIR/a.env" /etc/identity-registry/a.env
             sudo install -Dm644 "$DEPLOY_DIR/b.env" /etc/identity-registry/b.env
             sudo install -Dm755 "$DEPLOY_DIR/remote_rolling_deploy.sh" /usr/local/bin/remote_rolling_deploy.sh
+            sudo mkdir -p /opt/botid
 
             if [[ "${MANAGE_CADDY_CONFIG:-false}" == "true" ]] && command -v caddy >/dev/null 2>&1; then
               sudo mkdir -p /etc/caddy/sites-enabled
@@ -92,6 +112,6 @@ jobs:
 
             sudo systemctl daemon-reload
             sudo systemctl enable identity-registry@a identity-registry@b
-            sudo /usr/local/bin/remote_rolling_deploy.sh "$DEPLOY_DIR/identity-server"
+            /usr/local/bin/remote_rolling_deploy.sh "$DEPLOY_DIR/identity-server"
 
             rm -rf "$DEPLOY_DIR"

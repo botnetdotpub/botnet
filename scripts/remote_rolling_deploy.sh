@@ -59,7 +59,11 @@ for instance in "${INSTANCES[@]}"; do
 
   echo "Restarting identity-registry@${instance}"
   sudo systemctl restart "identity-registry@${instance}"
-  wait_for_health "$health_url"
+  if ! wait_for_health "$health_url"; then
+    echo "identity-registry@${instance} failed health check; service status:"
+    sudo systemctl status "identity-registry@${instance}" --no-pager -l || true
+    exit 1
+  fi
   echo "identity-registry@${instance} healthy on :${local_port}"
 done
 
