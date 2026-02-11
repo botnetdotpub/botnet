@@ -86,13 +86,13 @@ Workflow file: `.github/workflows/vps-rolling-deploy.yml`
 The workflow will:
 1. Build `identity-server` in release mode
 2. SCP the binary + systemd/caddy config to the VPS
-3. Update systemd units (and optionally install Caddy site snippet)
+3. Update systemd units and install `/etc/caddy/sites-enabled/botnet.pub.caddy`
 4. Run rolling restart (`identity-registry@a` then `identity-registry@b`) with `/health` checks
 
 Prerequisite on VPS:
 - `VPS_USER` must have passwordless `sudo` for `systemctl`, `install`, and writing `/etc/systemd` and `/etc/caddy`.
 - Main `/etc/caddy/Caddyfile` must include: `import /etc/caddy/sites-enabled/*.caddy`
-- By default, workflow does **not** modify Caddy unless `MANAGE_CADDY_CONFIG=true`.
+- By default, workflow does **not** modify main `/etc/caddy/Caddyfile` unless `MANAGE_CADDY_CONFIG=true`.
 
 ### Optional: Caddy automatic HTTPS
 

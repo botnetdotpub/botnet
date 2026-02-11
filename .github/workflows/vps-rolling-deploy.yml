@@ -99,12 +99,16 @@ jobs:
             sudo install -Dm644 "$DEPLOY_DIR/b.env" /etc/identity-registry/b.env
             sudo install -Dm755 "$DEPLOY_DIR/remote_rolling_deploy.sh" /usr/local/bin/remote_rolling_deploy.sh
             sudo mkdir -p /opt/botid
+            sudo mkdir -p /etc/caddy/sites-enabled
+            sudo install -Dm644 "$DEPLOY_DIR/Caddyfile.identity-registry" /etc/caddy/sites-enabled/botnet.pub.caddy
 
-            if [[ "${MANAGE_CADDY_CONFIG:-false}" == "true" ]] && command -v caddy >/dev/null 2>&1; then
-              sudo mkdir -p /etc/caddy/sites-enabled
-              sudo install -Dm644 "$DEPLOY_DIR/Caddyfile.identity-registry" /etc/caddy/sites-enabled/botnet.pub.caddy
+            if command -v caddy >/dev/null 2>&1; then
               if ! sudo grep -q '^import /etc/caddy/sites-enabled/\*\.caddy$' /etc/caddy/Caddyfile; then
-                echo 'import /etc/caddy/sites-enabled/*.caddy' | sudo tee -a /etc/caddy/Caddyfile >/dev/null
+                if [[ "${MANAGE_CADDY_CONFIG:-false}" == "true" ]]; then
+                  echo 'import /etc/caddy/sites-enabled/*.caddy' | sudo tee -a /etc/caddy/Caddyfile >/dev/null
+                else
+                  echo "warning: /etc/caddy/Caddyfile is missing import /etc/caddy/sites-enabled/*.caddy" >&2
+                fi
               fi
               sudo caddy validate --config /etc/caddy/Caddyfile
               sudo systemctl reload caddy
