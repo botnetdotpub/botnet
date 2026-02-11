@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{Html, IntoResponse},
     routing::{delete, get, post},
     Json, Router,
 };
@@ -66,6 +66,8 @@ fn parse_bind_addr(bind_addr: Option<&str>, port: Option<&str>) -> anyhow::Resul
 
 fn app_router(state: AppState) -> Router {
     Router::new()
+        .route("/", get(root))
+        .route("/docs", get(docs))
         .route("/health", get(health))
         .route("/v1/agents", post(create_agent))
         .route("/v1/agents/{agent_id}", get(get_agent).patch(update_agent))
@@ -78,6 +80,59 @@ fn app_router(state: AppState) -> Router {
         .route("/v1/nonce", get(get_nonce))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+async fn root() -> impl IntoResponse {
+    Json(json!({
+        "service": "ai-agent-identity-registry",
+        "status": "ok",
+        "docs": "/docs",
+        "health": "/health"
+    }))
+}
+
+async fn docs() -> impl IntoResponse {
+    Html(
+        r#"<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Agent Registry API Docs</title>
+    <style>
+      body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem auto; max-width: 920px; padding: 0 1rem; line-height: 1.45; }
+      h1 { margin-bottom: 0.2rem; }
+      code { background: #f3f4f6; padding: 0.1rem 0.35rem; border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+      th, td { border: 1px solid #e5e7eb; text-align: left; padding: 0.55rem 0.65rem; vertical-align: top; }
+      th { background: #f9fafb; }
+      .muted { color: #6b7280; }
+    </style>
+  </head>
+  <body>
+    <h1>AI Agent Registry API</h1>
+    <p class="muted">Starter API surface for agent identity records, keys, and policy-managed operations.</p>
+    <p>Health check: <code>/health</code></p>
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Operation</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>GET</td><td><code>/health</code></td><td>Service health</td><td>Implemented</td></tr>
+        <tr><td>GET</td><td><code>/v1/nonce</code></td><td>Issue nonce</td><td>Implemented</td></tr>
+        <tr><td>POST</td><td><code>/v1/agents</code></td><td>Create agent</td><td>Implemented</td></tr>
+        <tr><td>GET</td><td><code>/v1/agents/{agent_id}</code></td><td>Get agent</td><td>Implemented</td></tr>
+        <tr><td>PATCH</td><td><code>/v1/agents/{agent_id}</code></td><td>Update agent</td><td>Implemented</td></tr>
+        <tr><td>POST</td><td><code>/v1/agents/{agent_id}/keys</code></td><td>Add key</td><td>Scaffolded (501)</td></tr>
+        <tr><td>DELETE</td><td><code>/v1/agents/{agent_id}/keys/{key_id}</code></td><td>Remove key</td><td>Scaffolded (501)</td></tr>
+        <tr><td>POST</td><td><code>/v1/agents/{agent_id}/rotate</code></td><td>Rotate key</td><td>Scaffolded (501)</td></tr>
+        <tr><td>POST</td><td><code>/v1/agents/{agent_id}/revoke</code></td><td>Revoke agent</td><td>Scaffolded (501)</td></tr>
+        <tr><td>POST</td><td><code>/v1/attestations</code></td><td>Publish attestation</td><td>Scaffolded (501)</td></tr>
+        <tr><td>GET</td><td><code>/v1/search</code></td><td>Search agents</td><td>Scaffolded (501)</td></tr>
+      </tbody>
+    </table>
+  </body>
+</html>
+"#,
+    )
 }
 
 async fn health() -> impl IntoResponse {
@@ -358,6 +413,34 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let json = body_json(response).await;
         assert_eq!(json["status"], "ok");
+    }
+
+    #[tokio::test]
+    async fn root_returns_docs_pointer() {
+        let app = app_router(AppState::default());
+        let response = app
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .expect("request");
+        assert_eq!(response.status(), StatusCode::OK);
+        let json = body_json(response).await;
+        assert_eq!(json["docs"], "/docs");
+    }
+
+    #[tokio::test]
+    async fn docs_returns_html() {
+        let app = app_router(AppState::default());
+        let response = app
+            .oneshot(Request::builder().uri("/docs").body(Body::empty()).unwrap())
+            .await
+            .expect("request");
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let body = String::from_utf8(bytes.to_vec()).expect("utf8");
+        assert!(body.contains("AI Agent Registry API"));
+        assert!(body.contains("/v1/agents"));
     }
 
     #[tokio::test]
