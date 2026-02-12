@@ -13,6 +13,12 @@ Bootstrap workspace for an AI Agent Identity Registry with:
 cargo run -p identity-server
 ```
 
+The server defaults to SQLite persistence:
+- `STORAGE_BACKEND=sqlite`
+- `DATABASE_URL=sqlite:///opt/botid/identity-registry.sqlite3`
+
+For local ephemeral runs, set `STORAGE_BACKEND=memory`.
+
 In another terminal:
 
 ```bash
@@ -25,6 +31,23 @@ cargo run -p identity-cli -- --help
 cargo fmt --all
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+```
+
+## Storage backends
+
+`identity-storage` now has three options:
+- `SqliteStore` (default feature): no external database required.
+- `PostgresStore` (optional feature): enable with `--features postgres`.
+- `MemoryStore`: in-memory mock/test backend (idiomatic for fast unit tests).
+
+Examples:
+
+```bash
+# default (sqlite + memory)
+cargo test -p identity-storage
+
+# postgres backend enabled
+cargo test -p identity-storage --no-default-features --features postgres
 ```
 
 ## Deploy on a VPS (recommended: GitHub Actions + SCP + systemd rolling)
@@ -79,6 +102,9 @@ curl -sSf http://127.0.0.1:8082/health
 curl -sSf http://<your-vps-ip-or-domain>/health
 ```
 
+The deploy env files (`/etc/identity-registry/a.env` and `/etc/identity-registry/b.env`) are configured to use the same SQLite DB file:
+- `DATABASE_URL=sqlite:///opt/botid/identity-registry.sqlite3`
+
 ### 6. What the deploy workflow does
 
 Workflow file: `.github/workflows/vps-rolling-deploy.yml`
@@ -109,7 +135,7 @@ sudo systemctl reload caddy
 - `/crates/identity-core`: shared types, canonicalization, agent ID derivation
 - `/crates/identity-crypto`: proof/JWS helpers (starter)
 - `/crates/identity-policy`: threshold policy evaluation
-- `/crates/identity-storage`: storage trait + Postgres-backed skeleton
+- `/crates/identity-storage`: storage trait + SQLite(default)/Postgres(optional)/Memory(mock) backends
 - `/crates/identity-server`: Axum HTTP API skeleton
 - `/crates/identity-cli`: CLI skeleton using SDK
 - `/crates/identity-sdk`: native SDK starter

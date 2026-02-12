@@ -33,6 +33,11 @@ impl Storage for MemoryStore {
         Ok(agents.get(agent_id).cloned())
     }
 
+    async fn list_agents(&self) -> anyhow::Result<Vec<AgentRecord>> {
+        let agents = self.agents.read().await;
+        Ok(agents.values().cloned().collect())
+    }
+
     async fn update_agent(&self, record: &AgentRecord) -> anyhow::Result<AgentRecord> {
         let agent_id = record
             .agent_id

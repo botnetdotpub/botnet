@@ -5,6 +5,7 @@ use identity_core::{AgentRecord, Policy, PublicKey};
 pub trait Storage: Send + Sync {
     async fn create_agent(&self, record: &AgentRecord) -> anyhow::Result<AgentRecord>;
     async fn get_agent(&self, agent_id: &str) -> anyhow::Result<Option<AgentRecord>>;
+    async fn list_agents(&self) -> anyhow::Result<Vec<AgentRecord>>;
     async fn update_agent(&self, record: &AgentRecord) -> anyhow::Result<AgentRecord>;
 
     async fn get_policy(&self, agent_id: &str) -> anyhow::Result<Option<Policy>>;

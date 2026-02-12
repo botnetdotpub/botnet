@@ -17,6 +17,7 @@ hex.workspace = true
 identity-core = { path = "../identity-core" }
 identity-crypto = { path = "../identity-crypto" }
 identity-policy = { path = "../identity-policy" }
+identity-storage = { path = "../identity-storage" }
 multibase.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -99,6 +99,7 @@ jobs:
             sudo install -Dm644 "$DEPLOY_DIR/b.env" /etc/identity-registry/b.env
             sudo install -Dm755 "$DEPLOY_DIR/remote_rolling_deploy.sh" /usr/local/bin/remote_rolling_deploy.sh
             sudo mkdir -p /opt/botid
+            sudo chown www-data:www-data /opt/botid
             sudo mkdir -p /etc/caddy/sites-enabled
             sudo install -Dm644 "$DEPLOY_DIR/Caddyfile.identity-registry" /etc/caddy/sites-enabled/botnet.pub.caddy
 

@@ -1,3 +1,5 @@
+#![cfg(feature = "postgres")]
+
 use identity_core::{AgentRecord, AgentStatus, PublicKey};
 use identity_storage::{PostgresStore, Storage};
 

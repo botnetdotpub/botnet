@@ -82,6 +82,20 @@ impl Storage for PostgresStore {
         Ok(Some(record))
     }
 
+    async fn list_agents(&self) -> anyhow::Result<Vec<AgentRecord>> {
+        let rows = sqlx::query("SELECT data FROM agents")
+            .fetch_all(&self.pool)
+            .await
+            .context("list agents")?;
+
+        rows.into_iter()
+            .map(|row| {
+                let data: serde_json::Value = row.try_get("data").context("read data column")?;
+                serde_json::from_value(data).context("deserialize agent")
+            })
+            .collect()
+    }
+
     async fn update_agent(&self, record: &AgentRecord) -> anyhow::Result<AgentRecord> {
         let agent_id = record
             .agent_id
@@ -126,52 +140,10 @@ impl Storage for PostgresStore {
         agent_id: &str,
         key_id: &str,
     ) -> anyhow::Result<Option<PublicKey>> {
-        let row = sqlx::query(
-            "SELECT algorithm, public_key_multibase, primary_key, valid_from, valid_to, revoked_at, revocation_reason, origin
-             FROM keys WHERE agent_id = $1 AND key_id = $2",
-        )
-        .bind(agent_id)
-        .bind(key_id)
-        .fetch_optional(&self.pool)
-        .await
-        .context("select agent key")?;
-
-        let Some(row) = row else {
-            return Ok(None);
-        };
-
-        let key = PublicKey {
-            key_id: key_id.to_string(),
-            algorithm: row.try_get("algorithm").context("algorithm")?,
-            public_key_multibase: row
-                .try_get("public_key_multibase")
-                .context("public_key_multibase")?,
-            purpose: vec!["signing".to_string()],
-            valid_from: row
-                .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("valid_from")
-                .context("valid_from")?
-                .map(|d| d.to_rfc3339()),
-            valid_to: row
-                .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("valid_to")
-                .context("valid_to")?
-                .map(|d| d.to_rfc3339()),
-            revoked_at: row
-                .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("revoked_at")
-                .context("revoked_at")?
-                .map(|d| d.to_rfc3339()),
-            revocation_reason: row
-                .try_get("revocation_reason")
-                .context("revocation_reason")?,
-            primary: Some(row.try_get("primary_key").context("primary_key")?),
-            origin: row
-                .try_get::<Option<serde_json::Value>, _>("origin")
-                .context("origin")?
-                .map(serde_json::from_value)
-                .transpose()
-                .context("origin json")?,
-        };
-
-        Ok(Some(key))
+        Ok(self
+            .get_agent(agent_id)
+            .await?
+            .and_then(|record| record.public_keys.into_iter().find(|k| k.key_id == key_id)))
     }
 
     async fn get_controller_pubkey(
@@ -180,16 +152,15 @@ impl Storage for PostgresStore {
         controller_agent_id: &str,
         key_id: &str,
     ) -> anyhow::Result<Option<PublicKey>> {
-        let allowed = sqlx::query(
-            "SELECT 1 FROM controllers WHERE agent_id = $1 AND controller_agent_id = $2",
-        )
-        .bind(target_agent_id)
-        .bind(controller_agent_id)
-        .fetch_optional(&self.pool)
-        .await
-        .context("check controller relation")?
-        .is_some();
+        let Some(target) = self.get_agent(target_agent_id).await? else {
+            return Ok(None);
+        };
 
+        let allowed = target
+            .controllers
+            .unwrap_or_default()
+            .into_iter()
+            .any(|c| c.controller_agent_id == controller_agent_id);
         if !allowed {
             return Ok(None);
         }

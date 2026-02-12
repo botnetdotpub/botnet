@@ -5,13 +5,18 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+default = ["sqlite"]
+sqlite = ["sqlx/sqlite"]
+postgres = ["sqlx/postgres"]
+
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
 identity-core = { path = "../identity-core" }
 serde_json.workspace = true
-sqlx.workspace = true
+sqlx = { workspace = true }
 tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
