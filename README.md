@@ -63,18 +63,16 @@ For this path, the VPS does **not** need Rust installed.
 
 ```bash
 sudo apt update
-sudo apt install -y caddy curl
+sudo apt install -y curl
 ```
 
 ### 2. One-time setup for rolling services
 
 ```bash
 sudo mkdir -p /etc/identity-registry
-sudo mkdir -p /etc/caddy/sites-enabled
 # First deploy from GitHub Actions will install:
 # - /etc/systemd/system/identity-registry@.service
 # - /etc/identity-registry/a.env and b.env
-# - /etc/caddy/sites-enabled/botnet.pub.caddy
 ```
 
 ### 3. Configure GitHub repository secrets
@@ -84,7 +82,6 @@ VPS_HOST
 VPS_USER
 VPS_SSH_KEY
 VPS_PORT   # optional, defaults to 22
-MANAGE_CADDY_CONFIG  # optional: set to "true" only if you want CI to manage Caddy files
 ```
 
 ### 4. Trigger deploy
@@ -111,21 +108,20 @@ Workflow file: `.github/workflows/vps-rolling-deploy.yml`
 
 The workflow will:
 1. Build `identity-server` in release mode
-2. SCP the binary + systemd/caddy config to the VPS
-3. Update systemd units and install `/etc/caddy/sites-enabled/botnet.pub.caddy`
+2. SCP the binary + systemd/env config to the VPS
+3. Update systemd units and env files
 4. Run rolling restart (`identity-registry@a` then `identity-registry@b`) with `/health` checks
 
 Prerequisite on VPS:
-- `VPS_USER` must have passwordless `sudo` for `systemctl`, `install`, and writing `/etc/systemd` and `/etc/caddy`.
-- Main `/etc/caddy/Caddyfile` must include: `import /etc/caddy/sites-enabled/*.caddy`
-- By default, workflow does **not** modify main `/etc/caddy/Caddyfile` unless `MANAGE_CADDY_CONFIG=true`.
+- `VPS_USER` must have passwordless `sudo` for `systemctl`, `install`, and writing `/etc/systemd`, `/etc/identity-registry`, `/usr/local/bin`, and `/opt/botid`.
 
-### Optional: Caddy automatic HTTPS
+### Optional: Caddy (manual only)
 
 ```bash
-# Keep each site in its own file under /etc/caddy/sites-enabled/*.caddy.
-# This repo defaults to botnet.pub in deploy/caddy/Caddyfile.identity-registry.
-# Override with IDENTITY_REGISTRY_SITE if needed.
+# Install the template from deploy/caddy/Caddyfile.identity-registry manually:
+sudo mkdir -p /etc/caddy/sites-enabled
+sudo install -Dm644 deploy/caddy/Caddyfile.identity-registry /etc/caddy/sites-enabled/botnet.pub.caddy
+echo 'import /etc/caddy/sites-enabled/*.caddy' | sudo tee -a /etc/caddy/Caddyfile >/dev/null
 sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```

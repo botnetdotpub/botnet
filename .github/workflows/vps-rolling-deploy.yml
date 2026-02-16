@@ -63,7 +63,6 @@ jobs:
           cp deploy/systemd/identity-registry@.service dist/identity-registry@.service
           cp deploy/env/a.env dist/a.env
           cp deploy/env/b.env dist/b.env
-          cp deploy/caddy/Caddyfile.identity-registry dist/Caddyfile.identity-registry
           cp scripts/remote_rolling_deploy.sh dist/remote_rolling_deploy.sh
           chmod +x dist/remote_rolling_deploy.sh
 
@@ -81,15 +80,12 @@ jobs:
 
       - name: Install config + rolling restart via SSH
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          MANAGE_CADDY_CONFIG: ${{ secrets.MANAGE_CADDY_CONFIG || 'false' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
           port: ${{ secrets.VPS_PORT || '22' }}
-          envs: MANAGE_CADDY_CONFIG
           script: |
             set -euo pipefail
             DEPLOY_DIR="$HOME/botid-deploy"
@@ -100,20 +96,6 @@ jobs:
             sudo install -Dm755 "$DEPLOY_DIR/remote_rolling_deploy.sh" /usr/local/bin/remote_rolling_deploy.sh
             sudo mkdir -p /opt/botid
             sudo chown www-data:www-data /opt/botid
-            sudo mkdir -p /etc/caddy/sites-enabled
-            sudo install -Dm644 "$DEPLOY_DIR/Caddyfile.identity-registry" /etc/caddy/sites-enabled/botnet.pub.caddy
-
-            if command -v caddy >/dev/null 2>&1; then
-              if ! sudo grep -q '^import /etc/caddy/sites-enabled/\*\.caddy$' /etc/caddy/Caddyfile; then
-                if [[ "${MANAGE_CADDY_CONFIG:-false}" == "true" ]]; then
-                  echo 'import /etc/caddy/sites-enabled/*.caddy' | sudo tee -a /etc/caddy/Caddyfile >/dev/null
-                else
-                  echo "warning: /etc/caddy/Caddyfile is missing import /etc/caddy/sites-enabled/*.caddy" >&2
-                fi
-              fi
-              sudo caddy validate --config /etc/caddy/Caddyfile
-              sudo systemctl reload caddy
-            fi
 
             sudo systemctl daemon-reload
             sudo systemctl enable identity-registry@a identity-registry@b
