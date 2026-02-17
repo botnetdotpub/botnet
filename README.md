@@ -33,6 +33,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
+CI/deploy note:
+- GitHub Actions uses `rust-cache` so dependency/build artifacts can be reused across runs.
+
 ## Storage backends
 
 `identity-storage` now has three options:
@@ -53,7 +56,8 @@ cargo test -p identity-storage --no-default-features --features postgres
 ## Deploy on a VPS (recommended: GitHub Actions + SCP + systemd rolling)
 
 This is the recommended path for your setup.
-- CI builds the Rust binary.
+- CI builds and tests the Rust binary on pushes to `main`.
+- Deploy runs only after CI succeeds and reuses the CI artifact.
 - VPS receives only the built binary over SCP.
 - VPS runs rolling restarts via `systemd` (`identity-registry@a` then `@b`).
 
@@ -87,8 +91,10 @@ VPS_PORT   # optional, defaults to 22
 ### 4. Trigger deploy
 
 ```bash
-# Push to main (or run workflow_dispatch):
-# .github/workflows/vps-rolling-deploy.yml
+# Push to main:
+# - CI runs first (.github/workflows/ci.yml)
+# - Deploy runs after CI succeeds (.github/workflows/vps-rolling-deploy.yml)
+# You can also run deploy manually via workflow_dispatch.
 ```
 
 ### 5. Verify
@@ -107,7 +113,7 @@ The deploy env files (`/etc/identity-registry/a.env` and `/etc/identity-registry
 Workflow file: `.github/workflows/vps-rolling-deploy.yml`
 
 The workflow will:
-1. Build `identity-server` in release mode
+1. Download `identity-server` release artifact from CI
 2. SCP the binary + systemd/env config to the VPS
 3. Update systemd units and env files
 4. Run rolling restart (`identity-registry@a` then `identity-registry@b`) with `/health` checks

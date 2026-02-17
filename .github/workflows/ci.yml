@@ -2,10 +2,22 @@ name: ci
 
 on:
   push:
+    branches: ["main"]
   pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "crates/**"
+      - "migrations/**"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/vps-rolling-deploy.yml"
+      - "deploy/systemd/**"
+      - "deploy/env/**"
+      - "scripts/**"
 
 jobs:
-  rust:
+  lint:
     runs-on: ubuntu-latest
     env:
       CARGO_INCREMENTAL: 0
@@ -31,18 +43,50 @@ jobs:
       - name: Lint
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Test
-        run: cargo test --workspace
-
       - name: Wasm check
         run: cargo check -p identity-web --target wasm32-unknown-unknown
 
+  test:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: botnet-pub-rust
+          add-job-id-key: "false"
+          workspaces: |
+            . -> target
+          cache-on-failure: true
+
+      - name: Test
+        run: cargo test --workspace
+
+  release-artifact:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_RELEASE_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: botnet-pub-rust
+          add-job-id-key: "false"
+          workspaces: |
+            . -> target
+          cache-on-failure: true
+
       - name: Build release binary for deploy
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: cargo build --release -p identity-server --locked
 
       - name: Upload release artifact
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: identity-server-release
