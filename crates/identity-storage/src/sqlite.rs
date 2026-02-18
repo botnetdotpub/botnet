@@ -3,7 +3,11 @@ use anyhow::Context;
 use async_trait::async_trait;
 use chrono::{SecondsFormat, Utc};
 use identity_core::{AgentRecord, Policy, PublicKey};
-use sqlx::{sqlite::SqlitePoolOptions, Row, SqlitePool};
+use sqlx::{
+    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+    Row, SqlitePool,
+};
+use std::str::FromStr;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -13,9 +17,12 @@ pub struct SqliteStore {
 
 impl SqliteStore {
     pub async fn connect(database_url: &str) -> anyhow::Result<Self> {
+        let options = SqliteConnectOptions::from_str(database_url)
+            .context("invalid sqlite connection string")?
+            .create_if_missing(true);
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
-            .connect(database_url)
+            .connect_with(options)
             .await
             .context("failed to connect to sqlite")?;
         Ok(Self { pool })
