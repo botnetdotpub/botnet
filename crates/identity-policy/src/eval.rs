@@ -7,7 +7,7 @@ pub enum Operation {
     AddKey,
     RotateKey,
     RevokeKey,
-    RevokeAgent,
+    RevokeBot,
     ManagePolicy,
 }
 
@@ -18,7 +18,7 @@ impl Operation {
             Self::AddKey => "add_key",
             Self::RotateKey => "rotate_key",
             Self::RevokeKey => "revoke_key",
-            Self::RevokeAgent => "revoke_agent",
+            Self::RevokeBot => "revoke_bot",
             Self::ManagePolicy => "manage_policy",
         }
     }
@@ -55,7 +55,7 @@ pub fn evaluate_threshold(
     let allowed: HashSet<(Option<String>, String)> = signer_set
         .members
         .iter()
-        .map(|m| (m.r#ref.controller_agent_id.clone(), m.r#ref.key_id.clone()))
+        .map(|m| (m.r#ref.controller_bot_id.clone(), m.r#ref.key_id.clone()))
         .collect();
 
     let mut seen = HashSet::new();
@@ -93,13 +93,13 @@ mod tests {
                     SignerRef {
                         r#ref: KeyRef {
                             key_id: "k1".into(),
-                            controller_agent_id: None,
+                            controller_bot_id: None,
                         },
                     },
                     SignerRef {
                         r#ref: KeyRef {
                             key_id: "k2".into(),
-                            controller_agent_id: Some("urn:agent:sha256:controller".into()),
+                            controller_bot_id: Some("urn:bot:sha256:controller".into()),
                         },
                     },
                 ],
@@ -110,7 +110,7 @@ mod tests {
     #[test]
     fn threshold_success() {
         let mut policy = sample_policy(2);
-        policy.signer_sets[0].members[1].r#ref.controller_agent_id = None;
+        policy.signer_sets[0].members[1].r#ref.controller_bot_id = None;
 
         let valid = vec![(None, "k1".to_string()), (None, "k2".to_string())];
         evaluate_threshold(Some(&policy), Operation::Update, &valid).expect("must pass");
@@ -123,7 +123,7 @@ mod tests {
             (None, "k1".to_string()),
             (None, "k1".to_string()),
             (
-                Some("urn:agent:sha256:controller".to_string()),
+                Some("urn:bot:sha256:controller".to_string()),
                 "k2".to_string(),
             ),
         ];

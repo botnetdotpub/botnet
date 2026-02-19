@@ -1,6 +1,6 @@
-# AI Agent Identity Registry (Rust Workspace)
+# AI Bot Identity Registry (Rust Workspace)
 
-Bootstrap workspace for an AI Agent Identity Registry with:
+Bootstrap workspace for an AI Bot Identity Registry with:
 - Axum server (`identity-server`)
 - CLI (`identity-cli`)
 - Native Rust SDK (`identity-sdk`)
@@ -134,7 +134,7 @@ sudo systemctl reload caddy
 
 ## Layout
 
-- `/crates/identity-core`: shared types, canonicalization, agent ID derivation
+- `/crates/identity-core`: shared types, canonicalization, bot ID derivation
 - `/crates/identity-crypto`: proof/JWS helpers (starter)
 - `/crates/identity-policy`: threshold policy evaluation
 - `/crates/identity-storage`: storage trait + SQLite(default)/Postgres(optional)/Memory(mock) backends

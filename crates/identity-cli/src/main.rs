@@ -1,11 +1,11 @@
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use identity_core::AgentRecord;
+use identity_core::BotRecord;
 use identity_sdk::{Client, LocalEd25519Signer};
 
 #[derive(Parser, Debug)]
-#[command(name = "agentctl")]
-#[command(about = "AI Agent Registry CLI")]
+#[command(name = "botctl")]
+#[command(about = "AI Bot Registry CLI")]
 struct Cli {
     #[arg(long, default_value = "http://localhost:8080/v1")]
     base_url: String,
@@ -26,18 +26,18 @@ enum Commands {
         file: String,
     },
     Get {
-        agent_id: String,
+        bot_id: String,
     },
     Update {
-        agent_id: String,
+        bot_id: String,
         file: String,
     },
     RotateKey {
-        agent_id: String,
+        bot_id: String,
         file: String,
     },
-    RevokeAgent {
-        agent_id: String,
+    RevokeBot {
+        bot_id: String,
         reason: Option<String>,
     },
 }
@@ -58,29 +58,29 @@ async fn main() -> anyhow::Result<()> {
         Commands::Register { file } => {
             let signer = required_signer(key_id.as_deref(), secret_seed_hex.as_deref())?;
             let record = read_record(&file)?;
-            let created = client.create_agent(record, &signer).await?;
+            let created = client.create_bot(record, &signer).await?;
             println!("{}", serde_json::to_string_pretty(&created)?);
         }
-        Commands::Get { agent_id } => {
-            let agent = client.get_agent(&agent_id).await?;
-            println!("{}", serde_json::to_string_pretty(&agent)?);
+        Commands::Get { bot_id } => {
+            let bot = client.get_bot(&bot_id).await?;
+            println!("{}", serde_json::to_string_pretty(&bot)?);
         }
-        Commands::Update { agent_id, file } => {
+        Commands::Update { bot_id, file } => {
             let signer = required_signer(key_id.as_deref(), secret_seed_hex.as_deref())?;
             let record = read_record(&file)?;
-            let updated = client.update_agent(&agent_id, record, &signer).await?;
+            let updated = client.update_bot(&bot_id, record, &signer).await?;
             println!("{}", serde_json::to_string_pretty(&updated)?);
         }
-        Commands::RotateKey { agent_id, file } => {
+        Commands::RotateKey { bot_id, file } => {
             println!(
-                "rotate_key is scaffolded but not implemented yet (agent_id={}, file={})",
-                agent_id, file
+                "rotate_key is scaffolded but not implemented yet (bot_id={}, file={})",
+                bot_id, file
             );
         }
-        Commands::RevokeAgent { agent_id, reason } => {
+        Commands::RevokeBot { bot_id, reason } => {
             println!(
-                "revoke_agent is scaffolded but not implemented yet (agent_id={}, reason={})",
-                agent_id,
+                "revoke_bot is scaffolded but not implemented yet (bot_id={}, reason={})",
+                bot_id,
                 reason.unwrap_or_else(|| "<none>".to_string())
             );
         }
@@ -89,9 +89,9 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn read_record(path: &str) -> anyhow::Result<AgentRecord> {
+fn read_record(path: &str) -> anyhow::Result<BotRecord> {
     let text = std::fs::read_to_string(path).with_context(|| format!("read {}", path))?;
-    serde_json::from_str(&text).with_context(|| format!("parse {} as AgentRecord JSON", path))
+    serde_json::from_str(&text).with_context(|| format!("parse {} as BotRecord JSON", path))
 }
 
 fn required_signer(
@@ -116,7 +116,7 @@ mod tests {
     #[test]
     fn parses_register_command_with_signing_args() {
         let cli = Cli::parse_from([
-            "agentctl",
+            "botctl",
             "--base-url",
             "http://localhost:8080/v1",
             "--key-id",
@@ -124,13 +124,13 @@ mod tests {
             "--secret-seed-hex",
             "0000000000000000000000000000000000000000000000000000000000000000",
             "register",
-            "agent.json",
+            "bot.json",
         ]);
 
         assert_eq!(cli.base_url, "http://localhost:8080/v1");
         assert_eq!(cli.key_id.as_deref(), Some("k1"));
         match cli.command {
-            Commands::Register { file } => assert_eq!(file, "agent.json"),
+            Commands::Register { file } => assert_eq!(file, "bot.json"),
             _ => panic!("expected register command"),
         }
     }

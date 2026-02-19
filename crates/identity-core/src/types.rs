@@ -4,17 +4,17 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum AgentStatus {
+pub enum BotStatus {
     Active,
     Deprecated,
     Revoked,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct AgentRecord {
-    pub agent_id: Option<String>,
+pub struct BotRecord {
+    pub bot_id: Option<String>,
     pub version: Option<u64>,
-    pub status: AgentStatus,
+    pub status: BotStatus,
     pub display_name: Option<String>,
     pub description: Option<String>,
     pub owner: Option<Owner>,
@@ -22,7 +22,7 @@ pub struct AgentRecord {
     pub endpoints: Option<Vec<Endpoint>>,
     pub capabilities: Option<Vec<String>>,
     pub controllers: Option<Vec<Controller>>,
-    pub parent_agent_id: Option<String>,
+    pub parent_bot_id: Option<String>,
     pub policy: Option<Policy>,
     pub attestations: Option<Vec<Attestation>>,
     pub evidence: Option<Vec<Evidence>>,
@@ -34,10 +34,10 @@ pub struct AgentRecord {
     pub proof_set: Option<Vec<ProofItem>>,
 }
 
-impl AgentRecord {
+impl BotRecord {
     pub fn payload_for_signing(&self) -> Self {
         let mut clone = self.clone();
-        clone.agent_id = None;
+        clone.bot_id = None;
         clone.version = None;
         clone.created_at = None;
         clone.updated_at = None;
@@ -86,7 +86,7 @@ pub struct Endpoint {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Controller {
-    pub controller_agent_id: String,
+    pub controller_bot_id: String,
     pub role: Option<String>,
     pub delegation: Option<Delegation>,
 }
@@ -127,7 +127,7 @@ pub struct SignerRef {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq, Hash)]
 pub struct KeyRef {
     pub key_id: String,
-    pub controller_agent_id: Option<String>,
+    pub controller_bot_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -151,7 +151,7 @@ pub struct ProofItem {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Attestation {
     pub attestation_id: Option<String>,
-    pub issuer_agent_id: String,
+    pub issuer_bot_id: String,
     pub r#type: String,
     pub statement: serde_json::Value,
     pub signature: SignatureRef,
@@ -176,11 +176,11 @@ pub struct Evidence {
 mod tests {
     use super::*;
 
-    fn sample_record() -> AgentRecord {
-        AgentRecord {
-            agent_id: Some("urn:agent:sha256:test".to_string()),
+    fn sample_record() -> BotRecord {
+        BotRecord {
+            bot_id: Some("urn:bot:sha256:test".to_string()),
             version: Some(42),
-            status: AgentStatus::Active,
+            status: BotStatus::Active,
             display_name: Some("test".to_string()),
             description: Some("desc".to_string()),
             owner: None,
@@ -199,7 +199,7 @@ mod tests {
             endpoints: None,
             capabilities: None,
             controllers: None,
-            parent_agent_id: None,
+            parent_bot_id: None,
             policy: None,
             attestations: None,
             evidence: None,
@@ -216,7 +216,7 @@ mod tests {
                 algorithm: "Ed25519".to_string(),
                 key_ref: KeyRef {
                     key_id: "k2".to_string(),
-                    controller_agent_id: Some("urn:agent:sha256:controller".to_string()),
+                    controller_bot_id: Some("urn:bot:sha256:controller".to_string()),
                 },
                 created: "2026-02-15T00:00:01Z".to_string(),
                 nonce: None,
@@ -230,14 +230,14 @@ mod tests {
         let record = sample_record();
         let payload = record.payload_for_signing();
 
-        assert!(payload.agent_id.is_none());
+        assert!(payload.bot_id.is_none());
         assert!(payload.version.is_none());
         assert!(payload.created_at.is_none());
         assert!(payload.updated_at.is_none());
         assert!(payload.proof.is_none());
         assert!(payload.proof_set.is_none());
 
-        assert_eq!(payload.status, AgentStatus::Active);
+        assert_eq!(payload.status, BotStatus::Active);
         assert_eq!(payload.display_name.as_deref(), Some("test"));
         assert_eq!(payload.public_keys[0].key_id, "k1");
     }

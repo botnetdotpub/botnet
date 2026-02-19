@@ -2,7 +2,7 @@ use crate::storage::Storage;
 use anyhow::Context;
 use async_trait::async_trait;
 use chrono::Utc;
-use identity_core::{AgentRecord, Policy, PublicKey};
+use identity_core::{BotRecord, Policy, PublicKey};
 #[cfg(test)]
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{migrate::Migrator, PgPool, Row};
@@ -42,84 +42,86 @@ impl PostgresStore {
 
 #[async_trait]
 impl Storage for PostgresStore {
-    async fn create_agent(&self, record: &AgentRecord) -> anyhow::Result<AgentRecord> {
-        let agent_id = record
-            .agent_id
+    async fn create_bot(&self, record: &BotRecord) -> anyhow::Result<BotRecord> {
+        let bot_id = record
+            .bot_id
             .clone()
-            .ok_or_else(|| anyhow::anyhow!("agent_id required before create"))?;
+            .ok_or_else(|| anyhow::anyhow!("bot_id required before create"))?;
 
-        let data = serde_json::to_value(record).context("serialize agent record")?;
+        let data = serde_json::to_value(record).context("serialize bot record")?;
         let status = serde_json::to_string(&record.status)
             .context("serialize status")?
             .trim_matches('"')
             .to_string();
 
-        sqlx::query("INSERT INTO agents (agent_id, status, version, data) VALUES ($1, $2, $3, $4)")
-            .bind(&agent_id)
+        sqlx::query("INSERT INTO bots (bot_id, status, version, data) VALUES ($1, $2, $3, $4)")
+            .bind(&bot_id)
             .bind(status)
             .bind(1_i64)
             .bind(data)
             .execute(&self.pool)
             .await
-            .context("insert agent")?;
+            .context("insert bot")?;
 
         Ok(record.clone())
     }
 
-    async fn get_agent(&self, agent_id: &str) -> anyhow::Result<Option<AgentRecord>> {
-        let row = sqlx::query("SELECT data FROM agents WHERE agent_id = $1")
-            .bind(agent_id)
+    async fn get_bot(&self, bot_id: &str) -> anyhow::Result<Option<BotRecord>> {
+        let row = sqlx::query("SELECT data FROM bots WHERE bot_id = $1")
+            .bind(bot_id)
             .fetch_optional(&self.pool)
             .await
-            .context("select agent")?;
+            .context("select bot")?;
 
         let Some(row) = row else {
             return Ok(None);
         };
 
         let data: serde_json::Value = row.try_get("data").context("read data column")?;
-        let record: AgentRecord = serde_json::from_value(data).context("deserialize agent")?;
+        let record: BotRecord = serde_json::from_value(data).context("deserialize bot")?;
         Ok(Some(record))
     }
 
-    async fn list_agents(&self) -> anyhow::Result<Vec<AgentRecord>> {
-        let rows = sqlx::query("SELECT data FROM agents")
+    async fn list_bots(&self) -> anyhow::Result<Vec<BotRecord>> {
+        let rows = sqlx::query("SELECT data FROM bots")
             .fetch_all(&self.pool)
             .await
-            .context("list agents")?;
+            .context("list bots")?;
 
         rows.into_iter()
             .map(|row| {
                 let data: serde_json::Value = row.try_get("data").context("read data column")?;
-                serde_json::from_value(data).context("deserialize agent")
+                serde_json::from_value(data).context("deserialize bot")
             })
             .collect()
     }
 
-    async fn update_agent(&self, record: &AgentRecord) -> anyhow::Result<AgentRecord> {
-        let agent_id = record
-            .agent_id
+    async fn update_bot(&self, record: &BotRecord) -> anyhow::Result<BotRecord> {
+        let bot_id = record
+            .bot_id
             .clone()
-            .ok_or_else(|| anyhow::anyhow!("agent_id required before update"))?;
+            .ok_or_else(|| anyhow::anyhow!("bot_id required before update"))?;
         let data = serde_json::to_value(record).context("serialize update record")?;
 
-        sqlx::query("UPDATE agents SET data = $2, updated_at = $3, version = version + 1 WHERE agent_id = $1")
-            .bind(agent_id)
-            .bind(data)
-            .bind(Utc::now())
-            .execute(&self.pool)
-            .await
-            .context("update agent")?;
+        sqlx::query(
+            "UPDATE bots SET data = $2, updated_at = $3, version = version + 1 WHERE bot_id = $1",
+        )
+        .bind(bot_id)
+        .bind(data)
+        .bind(Utc::now())
+        .execute(&self.pool)
+        .await
+        .context("update bot")?;
 
         Ok(record.clone())
     }
 
-    async fn get_policy(&self, agent_id: &str) -> anyhow::Result<Option<Policy>> {
-        let row = sqlx::query("SELECT data FROM agents WHERE agent_id = $1")
-            .bind(agent_id)
+    async fn get_policy(&self, bot_id: &str) -> anyhow::Result<Option<Policy>> {
+        let row = sqlx::query("SELECT data FROM bots WHERE bot_id = $1")
+            .bind(bot_id)
             .fetch_optional(&self.pool)
             .await
-            .context("select agent for policy")?;
+            .context("select bot for policy")?;
 
         let Some(row) = row else {
             return Ok(None);
@@ -135,24 +137,24 @@ impl Storage for PostgresStore {
         Ok(policy)
     }
 
-    async fn get_agent_pubkey(
+    async fn get_bot_pubkey(
         &self,
-        agent_id: &str,
+        bot_id: &str,
         key_id: &str,
     ) -> anyhow::Result<Option<PublicKey>> {
         Ok(self
-            .get_agent(agent_id)
+            .get_bot(bot_id)
             .await?
             .and_then(|record| record.public_keys.into_iter().find(|k| k.key_id == key_id)))
     }
 
     async fn get_controller_pubkey(
         &self,
-        target_agent_id: &str,
-        controller_agent_id: &str,
+        target_bot_id: &str,
+        controller_bot_id: &str,
         key_id: &str,
     ) -> anyhow::Result<Option<PublicKey>> {
-        let Some(target) = self.get_agent(target_agent_id).await? else {
+        let Some(target) = self.get_bot(target_bot_id).await? else {
             return Ok(None);
         };
 
@@ -160,12 +162,12 @@ impl Storage for PostgresStore {
             .controllers
             .unwrap_or_default()
             .into_iter()
-            .any(|c| c.controller_agent_id == controller_agent_id);
+            .any(|c| c.controller_bot_id == controller_bot_id);
         if !allowed {
             return Ok(None);
         }
 
-        self.get_agent_pubkey(controller_agent_id, key_id).await
+        self.get_bot_pubkey(controller_bot_id, key_id).await
     }
 
     async fn issue_nonce(&self) -> anyhow::Result<String> {
@@ -193,7 +195,7 @@ impl Storage for PostgresStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use identity_core::{AgentRecord, AgentStatus, PublicKey};
+    use identity_core::{BotRecord, BotStatus, PublicKey};
 
     fn lazy_store() -> PostgresStore {
         let pool = PgPoolOptions::new()
@@ -204,12 +206,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_agent_requires_agent_id_before_db_access() {
+    async fn create_bot_requires_bot_id_before_db_access() {
         let store = lazy_store();
-        let record = AgentRecord {
-            agent_id: None,
+        let record = BotRecord {
+            bot_id: None,
             version: None,
-            status: AgentStatus::Active,
+            status: BotStatus::Active,
             display_name: None,
             description: None,
             owner: None,
@@ -228,7 +230,7 @@ mod tests {
             endpoints: None,
             capabilities: None,
             controllers: None,
-            parent_agent_id: None,
+            parent_bot_id: None,
             policy: None,
             attestations: None,
             evidence: None,
@@ -238,17 +240,17 @@ mod tests {
             proof_set: None,
         };
 
-        let err = store.create_agent(&record).await.expect_err("must fail");
-        assert!(err.to_string().contains("agent_id required before create"));
+        let err = store.create_bot(&record).await.expect_err("must fail");
+        assert!(err.to_string().contains("bot_id required before create"));
     }
 
     #[tokio::test]
-    async fn update_agent_requires_agent_id_before_db_access() {
+    async fn update_bot_requires_bot_id_before_db_access() {
         let store = lazy_store();
-        let record = AgentRecord {
-            agent_id: None,
+        let record = BotRecord {
+            bot_id: None,
             version: None,
-            status: AgentStatus::Active,
+            status: BotStatus::Active,
             display_name: None,
             description: None,
             owner: None,
@@ -267,7 +269,7 @@ mod tests {
             endpoints: None,
             capabilities: None,
             controllers: None,
-            parent_agent_id: None,
+            parent_bot_id: None,
             policy: None,
             attestations: None,
             evidence: None,
@@ -277,7 +279,7 @@ mod tests {
             proof_set: None,
         };
 
-        let err = store.update_agent(&record).await.expect_err("must fail");
-        assert!(err.to_string().contains("agent_id required before update"));
+        let err = store.update_bot(&record).await.expect_err("must fail");
+        assert!(err.to_string().contains("bot_id required before update"));
     }
 }

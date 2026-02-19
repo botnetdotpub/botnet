@@ -1,4 +1,4 @@
-use identity_core::{canonical::canonicalize, AgentRecord};
+use identity_core::{canonical::canonicalize, BotRecord};
 use wasm_bindgen::prelude::*;
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
@@ -17,10 +17,10 @@ impl WasmClient {
         self.base_url.clone()
     }
 
-    pub async fn create_agent(&self, record_json: String) -> Result<String, JsValue> {
+    pub async fn create_bot(&self, record_json: String) -> Result<String, JsValue> {
         // Starter behavior: validates + canonicalizes payload shape.
         // Networking and browser key management are added in follow-up steps.
-        let mut record: AgentRecord = serde_json::from_str(&record_json)
+        let mut record: BotRecord = serde_json::from_str(&record_json)
             .map_err(|e| JsValue::from_str(&format!("invalid record JSON: {e}")))?;
 
         record.proof = None;
@@ -33,7 +33,7 @@ impl WasmClient {
         Ok(serde_json::json!({
             "base_url": self.base_url,
             "canonical_payload_hex": hex::encode(canon),
-            "note": "create_agent network/signing flow is scaffolded"
+            "note": "create_bot network/signing flow is scaffolded"
         })
         .to_string())
     }
@@ -51,10 +51,10 @@ mod tests {
     }
 
     #[test]
-    fn create_agent_returns_scaffold_payload_for_valid_input() {
+    fn create_bot_returns_scaffold_payload_for_valid_input() {
         let client = WasmClient::new("https://registry.example/v1".to_string());
         let input = serde_json::json!({
-            "agent_id": null,
+            "bot_id": null,
             "version": null,
             "status": "active",
             "display_name": "web-test",
@@ -75,7 +75,7 @@ mod tests {
             "endpoints": null,
             "capabilities": null,
             "controllers": null,
-            "parent_agent_id": null,
+            "parent_bot_id": null,
             "policy": null,
             "attestations": null,
             "evidence": null,
@@ -83,7 +83,7 @@ mod tests {
             "updated_at": null
         });
 
-        let result = block_on(client.create_agent(input.to_string())).expect("create_agent");
+        let result = block_on(client.create_bot(input.to_string())).expect("create_bot");
         let out: serde_json::Value = serde_json::from_str(&result).expect("json output");
         assert_eq!(out["base_url"], "https://registry.example/v1");
         assert!(out["canonical_payload_hex"].as_str().is_some());

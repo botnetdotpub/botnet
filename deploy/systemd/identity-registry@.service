@@ -1,5 +1,5 @@
 [Unit]
-Description=AI Agent Identity Registry (%i)
+Description=AI Bot Identity Registry (%i)
 After=network.target
 
 [Service]

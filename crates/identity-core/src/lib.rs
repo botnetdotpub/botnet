@@ -1,4 +1,4 @@
-pub mod agent_id;
+pub mod bot_id;
 pub mod canonical;
 pub mod types;
 pub mod validation;

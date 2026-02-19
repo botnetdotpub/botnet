@@ -1,12 +1,12 @@
 use anyhow::Context;
 use chrono::{SecondsFormat, Utc};
 use ed25519_dalek::SigningKey;
-use identity_core::{canonical::canonicalize, AgentRecord, KeyRef, Proof, ProofItem};
+use identity_core::{canonical::canonicalize, BotRecord, KeyRef, Proof, ProofItem};
 use identity_crypto::sign_compact_jws;
 
 pub trait Signer {
     fn key_id(&self) -> &str;
-    fn controller_agent_id(&self) -> Option<&str> {
+    fn controller_bot_id(&self) -> Option<&str> {
         None
     }
     fn sign(&self, canonical_payload: &[u8]) -> anyhow::Result<String>;
@@ -16,7 +16,7 @@ pub struct LocalEd25519Signer {
     key_id: String,
     signing_key: SigningKey,
     detached_jws: bool,
-    controller_agent_id: Option<String>,
+    controller_bot_id: Option<String>,
 }
 
 impl LocalEd25519Signer {
@@ -28,12 +28,12 @@ impl LocalEd25519Signer {
             key_id: key_id.into(),
             signing_key: SigningKey::from_bytes(&seed_arr),
             detached_jws: true,
-            controller_agent_id: None,
+            controller_bot_id: None,
         })
     }
 
-    pub fn with_controller(mut self, controller_agent_id: impl Into<String>) -> Self {
-        self.controller_agent_id = Some(controller_agent_id.into());
+    pub fn with_controller(mut self, controller_bot_id: impl Into<String>) -> Self {
+        self.controller_bot_id = Some(controller_bot_id.into());
         self
     }
 
@@ -48,8 +48,8 @@ impl Signer for LocalEd25519Signer {
         &self.key_id
     }
 
-    fn controller_agent_id(&self) -> Option<&str> {
-        self.controller_agent_id.as_deref()
+    fn controller_bot_id(&self) -> Option<&str> {
+        self.controller_bot_id.as_deref()
     }
 
     fn sign(&self, canonical_payload: &[u8]) -> anyhow::Result<String> {
@@ -75,79 +75,79 @@ impl Client {
         }
     }
 
-    pub async fn create_agent(
+    pub async fn create_bot(
         &self,
-        mut record: AgentRecord,
+        mut record: BotRecord,
         signer: &dyn Signer,
-    ) -> anyhow::Result<AgentRecord> {
+    ) -> anyhow::Result<BotRecord> {
         attach_single_proof(&mut record, signer)?;
 
         let response = self
             .http
-            .post(format!("{}/agents", self.base_url.trim_end_matches('/')))
+            .post(format!("{}/bots", self.base_url.trim_end_matches('/')))
             .json(&record)
             .send()
             .await
-            .context("POST /agents failed")?
+            .context("POST /bots failed")?
             .error_for_status()
-            .context("POST /agents returned error status")?;
+            .context("POST /bots returned error status")?;
 
         response
-            .json::<AgentRecord>()
+            .json::<BotRecord>()
             .await
             .context("decode create response")
     }
 
-    pub async fn get_agent(&self, agent_id: &str) -> anyhow::Result<AgentRecord> {
+    pub async fn get_bot(&self, bot_id: &str) -> anyhow::Result<BotRecord> {
         let response = self
             .http
             .get(format!(
-                "{}/agents/{}",
+                "{}/bots/{}",
                 self.base_url.trim_end_matches('/'),
-                urlencoding::encode(agent_id)
+                urlencoding::encode(bot_id)
             ))
             .send()
             .await
-            .context("GET /agents/:id failed")?
+            .context("GET /bots/:id failed")?
             .error_for_status()
-            .context("GET /agents/:id returned error status")?;
+            .context("GET /bots/:id returned error status")?;
 
         response
-            .json::<AgentRecord>()
+            .json::<BotRecord>()
             .await
             .context("decode get response")
     }
 
-    pub async fn update_agent(
+    pub async fn update_bot(
         &self,
-        agent_id: &str,
-        mut record: AgentRecord,
+        bot_id: &str,
+        mut record: BotRecord,
         signer: &dyn Signer,
-    ) -> anyhow::Result<AgentRecord> {
+    ) -> anyhow::Result<BotRecord> {
         attach_single_proof(&mut record, signer)?;
 
         let response = self
             .http
             .patch(format!(
-                "{}/agents/{}",
+                "{}/bots/{}",
                 self.base_url.trim_end_matches('/'),
-                urlencoding::encode(agent_id)
+                urlencoding::encode(bot_id)
             ))
             .json(&record)
             .send()
             .await
-            .context("PATCH /agents/:id failed")?
+            .context("PATCH /bots/:id failed")?
             .error_for_status()
-            .context("PATCH /agents/:id returned error status")?;
+            .context("PATCH /bots/:id returned error status")?;
 
         response
-            .json::<AgentRecord>()
+            .json::<BotRecord>()
             .await
             .context("decode update response")
     }
 }
 
-pub fn attach_single_proof(record: &mut AgentRecord, signer: &dyn Signer) -> anyhow::Result<()> {
+pub fn attach_single_proof(record: &mut BotRecord, signer: &dyn Signer) -> anyhow::Result<()> {
     record.proof = None;
     record.proof_set = None;
 
@@ -166,7 +166,7 @@ pub fn attach_single_proof(record: &mut AgentRecord, signer: &dyn Signer) -> any
     Ok(())
 }
 
-pub fn attach_proof_set(record: &mut AgentRecord, signers: &[&dyn Signer]) -> anyhow::Result<()> {
+pub fn attach_proof_set(record: &mut BotRecord, signers: &[&dyn Signer]) -> anyhow::Result<()> {
     if signers.is_empty() {
         anyhow::bail!("proof_set requires at least one signer");
     }
@@ -184,7 +184,7 @@ pub fn attach_proof_set(record: &mut AgentRecord, signers: &[&dyn Signer]) -> an
             algorithm: "Ed25519".into(),
             key_ref: KeyRef {
                 key_id: signer.key_id().to_string(),
-                controller_agent_id: signer.controller_agent_id().map(str::to_string),
+                controller_bot_id: signer.controller_bot_id().map(str::to_string),
             },
             created: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
             nonce: None,
@@ -200,11 +200,11 @@ pub fn attach_proof_set(record: &mut AgentRecord, signers: &[&dyn Signer]) -> an
 mod tests {
     use super::*;
     use ed25519_dalek::SigningKey;
-    use identity_core::{AgentStatus, PublicKey};
+    use identity_core::{BotStatus, PublicKey};
     use identity_crypto::verify_compact_jws;
     use rand::rngs::OsRng;
 
-    fn sample_record() -> (AgentRecord, SigningKey) {
+    fn sample_record() -> (BotRecord, SigningKey) {
         let mut rng = OsRng;
         let signing_key = SigningKey::generate(&mut rng);
         let public_key_multibase = multibase::encode(
@@ -213,10 +213,10 @@ mod tests {
         );
 
         (
-            AgentRecord {
-                agent_id: Some("urn:agent:sha256:placeholder".to_string()),
+            BotRecord {
+                bot_id: Some("urn:bot:sha256:placeholder".to_string()),
                 version: Some(7),
-                status: AgentStatus::Active,
+                status: BotStatus::Active,
                 display_name: Some("sdk-test".to_string()),
                 description: None,
                 owner: None,
@@ -235,7 +235,7 @@ mod tests {
                 endpoints: None,
                 capabilities: None,
                 controllers: None,
-                parent_agent_id: None,
+                parent_bot_id: None,
                 policy: None,
                 attestations: None,
                 evidence: None,
@@ -292,7 +292,7 @@ mod tests {
         let (mut record, signing_key) = sample_record();
         let signer = LocalEd25519Signer::from_seed_bytes("k1", &signing_key.to_bytes())
             .unwrap()
-            .with_controller("urn:agent:sha256:controller");
+            .with_controller("urn:bot:sha256:controller");
         let signers: Vec<&dyn Signer> = vec![&signer];
 
         attach_proof_set(&mut record, &signers).expect("attach set");
@@ -301,8 +301,8 @@ mod tests {
         let proof_set = record.proof_set.as_ref().expect("proof_set");
         assert_eq!(proof_set.len(), 1);
         assert_eq!(
-            proof_set[0].key_ref.controller_agent_id.as_deref(),
-            Some("urn:agent:sha256:controller")
+            proof_set[0].key_ref.controller_bot_id.as_deref(),
+            Some("urn:bot:sha256:controller")
         );
     }
 }

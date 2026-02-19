@@ -2,7 +2,7 @@ use crate::storage::Storage;
 use anyhow::Context;
 use async_trait::async_trait;
 use chrono::{SecondsFormat, Utc};
-use identity_core::{AgentRecord, Policy, PublicKey};
+use identity_core::{BotRecord, Policy, PublicKey};
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
     Row, SqlitePool,
@@ -55,8 +55,8 @@ impl SqliteStore {
             .context("set sqlite busy timeout")?;
 
         sqlx::query(
-            "CREATE TABLE IF NOT EXISTS agents (
-                agent_id TEXT PRIMARY KEY,
+            "CREATE TABLE IF NOT EXISTS bots (
+                bot_id TEXT PRIMARY KEY,
                 status TEXT NOT NULL,
                 version INTEGER NOT NULL DEFAULT 1,
                 data TEXT NOT NULL,
@@ -66,7 +66,7 @@ impl SqliteStore {
         )
         .execute(&self.pool)
         .await
-        .context("create agents table")?;
+        .context("create bots table")?;
 
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS nonces (
@@ -79,7 +79,7 @@ impl SqliteStore {
         .await
         .context("create nonces table")?;
 
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status)")
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_bots_status ON bots(status)")
             .execute(&self.pool)
             .await
             .context("create status index")?;
@@ -90,23 +90,23 @@ impl SqliteStore {
 
 #[async_trait]
 impl Storage for SqliteStore {
-    async fn create_agent(&self, record: &AgentRecord) -> anyhow::Result<AgentRecord> {
-        let agent_id = record
-            .agent_id
+    async fn create_bot(&self, record: &BotRecord) -> anyhow::Result<BotRecord> {
+        let bot_id = record
+            .bot_id
             .clone()
-            .ok_or_else(|| anyhow::anyhow!("agent_id required before create"))?;
+            .ok_or_else(|| anyhow::anyhow!("bot_id required before create"))?;
         let status = serde_json::to_string(&record.status)
             .context("serialize status")?
             .trim_matches('"')
             .to_string();
-        let data = serde_json::to_string(record).context("serialize agent record")?;
+        let data = serde_json::to_string(record).context("serialize bot record")?;
         let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
 
         sqlx::query(
-            "INSERT INTO agents (agent_id, status, version, data, created_at, updated_at)
+            "INSERT INTO bots (bot_id, status, version, data, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?)",
         )
-        .bind(&agent_id)
+        .bind(&bot_id)
         .bind(status)
         .bind(1_i64)
         .bind(data)
@@ -114,46 +114,46 @@ impl Storage for SqliteStore {
         .bind(&now)
         .execute(&self.pool)
         .await
-        .context("insert agent")?;
+        .context("insert bot")?;
 
         Ok(record.clone())
     }
 
-    async fn get_agent(&self, agent_id: &str) -> anyhow::Result<Option<AgentRecord>> {
-        let row = sqlx::query("SELECT data FROM agents WHERE agent_id = ?")
-            .bind(agent_id)
+    async fn get_bot(&self, bot_id: &str) -> anyhow::Result<Option<BotRecord>> {
+        let row = sqlx::query("SELECT data FROM bots WHERE bot_id = ?")
+            .bind(bot_id)
             .fetch_optional(&self.pool)
             .await
-            .context("select agent")?;
+            .context("select bot")?;
 
         let Some(row) = row else {
             return Ok(None);
         };
 
         let data: String = row.try_get("data").context("read data column")?;
-        let record: AgentRecord = serde_json::from_str(&data).context("deserialize agent")?;
+        let record: BotRecord = serde_json::from_str(&data).context("deserialize bot")?;
         Ok(Some(record))
     }
 
-    async fn list_agents(&self) -> anyhow::Result<Vec<AgentRecord>> {
-        let rows = sqlx::query("SELECT data FROM agents")
+    async fn list_bots(&self) -> anyhow::Result<Vec<BotRecord>> {
+        let rows = sqlx::query("SELECT data FROM bots")
             .fetch_all(&self.pool)
             .await
-            .context("list agents")?;
+            .context("list bots")?;
 
         rows.into_iter()
             .map(|row| {
                 let data: String = row.try_get("data").context("read data column")?;
-                serde_json::from_str(&data).context("deserialize agent")
+                serde_json::from_str(&data).context("deserialize bot")
             })
             .collect()
     }
 
-    async fn update_agent(&self, record: &AgentRecord) -> anyhow::Result<AgentRecord> {
-        let agent_id = record
-            .agent_id
+    async fn update_bot(&self, record: &BotRecord) -> anyhow::Result<BotRecord> {
+        let bot_id = record
+            .bot_id
             .clone()
-            .ok_or_else(|| anyhow::anyhow!("agent_id required before update"))?;
+            .ok_or_else(|| anyhow::anyhow!("bot_id required before update"))?;
         let status = serde_json::to_string(&record.status)
             .context("serialize status")?
             .trim_matches('"')
@@ -162,46 +162,46 @@ impl Storage for SqliteStore {
         let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
 
         sqlx::query(
-            "UPDATE agents
+            "UPDATE bots
              SET data = ?, status = ?, updated_at = ?, version = version + 1
-             WHERE agent_id = ?",
+             WHERE bot_id = ?",
         )
         .bind(data)
         .bind(status)
         .bind(now)
-        .bind(agent_id)
+        .bind(bot_id)
         .execute(&self.pool)
         .await
-        .context("update agent")?;
+        .context("update bot")?;
 
         Ok(record.clone())
     }
 
-    async fn get_policy(&self, agent_id: &str) -> anyhow::Result<Option<Policy>> {
+    async fn get_policy(&self, bot_id: &str) -> anyhow::Result<Option<Policy>> {
         Ok(self
-            .get_agent(agent_id)
+            .get_bot(bot_id)
             .await?
             .and_then(|record| record.policy.clone()))
     }
 
-    async fn get_agent_pubkey(
+    async fn get_bot_pubkey(
         &self,
-        agent_id: &str,
+        bot_id: &str,
         key_id: &str,
     ) -> anyhow::Result<Option<PublicKey>> {
         Ok(self
-            .get_agent(agent_id)
+            .get_bot(bot_id)
             .await?
             .and_then(|record| record.public_keys.into_iter().find(|k| k.key_id == key_id)))
     }
 
     async fn get_controller_pubkey(
         &self,
-        target_agent_id: &str,
-        controller_agent_id: &str,
+        target_bot_id: &str,
+        controller_bot_id: &str,
         key_id: &str,
     ) -> anyhow::Result<Option<PublicKey>> {
-        let Some(target) = self.get_agent(target_agent_id).await? else {
+        let Some(target) = self.get_bot(target_bot_id).await? else {
             return Ok(None);
         };
 
@@ -209,12 +209,12 @@ impl Storage for SqliteStore {
             .controllers
             .unwrap_or_default()
             .into_iter()
-            .any(|c| c.controller_agent_id == controller_agent_id);
+            .any(|c| c.controller_bot_id == controller_bot_id);
         if !allowed {
             return Ok(None);
         }
 
-        self.get_agent_pubkey(controller_agent_id, key_id).await
+        self.get_bot_pubkey(controller_bot_id, key_id).await
     }
 
     async fn issue_nonce(&self) -> anyhow::Result<String> {
@@ -246,13 +246,13 @@ impl Storage for SqliteStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use identity_core::{AgentStatus, Controller, PublicKey};
+    use identity_core::{BotStatus, Controller, PublicKey};
 
-    fn sample_agent(agent_id: &str, key_id: &str) -> AgentRecord {
-        AgentRecord {
-            agent_id: Some(agent_id.to_string()),
+    fn sample_bot(bot_id: &str, key_id: &str) -> BotRecord {
+        BotRecord {
+            bot_id: Some(bot_id.to_string()),
             version: Some(1),
-            status: AgentStatus::Active,
+            status: BotStatus::Active,
             display_name: Some("sqlite".to_string()),
             description: None,
             owner: None,
@@ -271,7 +271,7 @@ mod tests {
             endpoints: None,
             capabilities: None,
             controllers: None,
-            parent_agent_id: None,
+            parent_bot_id: None,
             policy: None,
             attestations: None,
             evidence: None,
@@ -289,11 +289,11 @@ mod tests {
             .expect("connect");
         store.run_migrations().await.expect("migrate");
 
-        let agent = sample_agent("urn:agent:sha256:sqlite-a", "k1");
-        store.create_agent(&agent).await.expect("create");
+        let bot = sample_bot("urn:bot:sha256:sqlite-a", "k1");
+        store.create_bot(&bot).await.expect("create");
 
         let fetched = store
-            .get_agent("urn:agent:sha256:sqlite-a")
+            .get_bot("urn:bot:sha256:sqlite-a")
             .await
             .expect("get")
             .expect("exists");
@@ -311,21 +311,21 @@ mod tests {
             .expect("connect");
         store.run_migrations().await.expect("migrate");
 
-        let mut target = sample_agent("urn:agent:sha256:target", "target-k1");
+        let mut target = sample_bot("urn:bot:sha256:target", "target-k1");
         target.controllers = Some(vec![Controller {
-            controller_agent_id: "urn:agent:sha256:controller".to_string(),
+            controller_bot_id: "urn:bot:sha256:controller".to_string(),
             role: Some("owner".to_string()),
             delegation: None,
         }]);
-        let controller = sample_agent("urn:agent:sha256:controller", "controller-k1");
+        let controller = sample_bot("urn:bot:sha256:controller", "controller-k1");
 
-        store.create_agent(&target).await.expect("target");
-        store.create_agent(&controller).await.expect("controller");
+        store.create_bot(&target).await.expect("target");
+        store.create_bot(&controller).await.expect("controller");
 
         let found = store
             .get_controller_pubkey(
-                "urn:agent:sha256:target",
-                "urn:agent:sha256:controller",
+                "urn:bot:sha256:target",
+                "urn:bot:sha256:controller",
                 "controller-k1",
             )
             .await

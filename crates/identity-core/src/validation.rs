@@ -1,9 +1,9 @@
-use crate::{AgentRecord, Policy};
+use crate::{BotRecord, Policy};
 use anyhow::{bail, Context};
 
-pub fn validate_agent_record(record: &AgentRecord) -> anyhow::Result<()> {
+pub fn validate_bot_record(record: &BotRecord) -> anyhow::Result<()> {
     if record.public_keys.is_empty() {
-        bail!("agent must include at least one public key");
+        bail!("bot must include at least one public key");
     }
 
     let primary_count = record
@@ -54,15 +54,15 @@ pub fn validate_policy(policy: &Policy) -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use crate::{
-        canonical::canonicalize, AgentRecord, AgentStatus, KeyRef, Policy, PolicyRule, Proof,
+        canonical::canonicalize, BotRecord, BotStatus, KeyRef, Policy, PolicyRule, Proof,
         PublicKey, SignerRef, SignerSet,
     };
 
-    fn sample_record() -> AgentRecord {
-        AgentRecord {
-            agent_id: None,
+    fn sample_record() -> BotRecord {
+        BotRecord {
+            bot_id: None,
             version: None,
-            status: AgentStatus::Active,
+            status: BotStatus::Active,
             display_name: Some("test".to_string()),
             description: None,
             owner: None,
@@ -81,7 +81,7 @@ mod tests {
             endpoints: None,
             capabilities: None,
             controllers: None,
-            parent_agent_id: None,
+            parent_bot_id: None,
             policy: None,
             attestations: None,
             evidence: None,
@@ -109,7 +109,7 @@ mod tests {
                     .map(|k| SignerRef {
                         r#ref: KeyRef {
                             key_id: (*k).to_string(),
-                            controller_agent_id: None,
+                            controller_bot_id: None,
                         },
                     })
                     .collect(),
@@ -129,14 +129,14 @@ mod tests {
     fn record_validation_requires_primary() {
         let mut record = sample_record();
         record.public_keys[0].primary = Some(false);
-        assert!(validate_agent_record(&record).is_err());
+        assert!(validate_bot_record(&record).is_err());
     }
 
     #[test]
     fn record_validation_rejects_empty_public_keys() {
         let mut record = sample_record();
         record.public_keys.clear();
-        assert!(validate_agent_record(&record).is_err());
+        assert!(validate_bot_record(&record).is_err());
     }
 
     #[test]
@@ -154,7 +154,7 @@ mod tests {
             primary: Some(true),
             origin: None,
         });
-        assert!(validate_agent_record(&record).is_err());
+        assert!(validate_bot_record(&record).is_err());
     }
 
     #[test]
@@ -168,7 +168,7 @@ mod tests {
             jws: "header..sig".to_string(),
         });
         record.proof_set = Some(vec![]);
-        assert!(validate_agent_record(&record).is_err());
+        assert!(validate_bot_record(&record).is_err());
     }
 
     #[test]

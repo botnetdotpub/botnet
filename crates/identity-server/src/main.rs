@@ -7,8 +7,8 @@ use axum::{
 };
 use chrono::{SecondsFormat, Utc};
 use identity_core::{
-    agent_id::derive_agent_id, canonical::canonicalize, validation::validate_agent_record,
-    AgentRecord, AgentStatus, Attestation, KeyRef, Proof, ProofItem, PublicKey,
+    bot_id::derive_bot_id, canonical::canonicalize, validation::validate_bot_record, Attestation,
+    BotRecord, BotStatus, KeyRef, Proof, ProofItem, PublicKey,
 };
 use identity_crypto::{keys::verifying_key_from_jwk, verify_compact_jws};
 use identity_policy::eval::{evaluate_threshold, Operation};
@@ -66,7 +66,7 @@ struct RotateKeyRequest {
 }
 
 #[derive(Debug, Deserialize)]
-struct RevokeAgentRequest {
+struct RevokeBotRequest {
     reason: Option<String>,
     proof: Option<Proof>,
     proof_set: Option<Vec<ProofItem>>,
@@ -74,14 +74,14 @@ struct RevokeAgentRequest {
 
 #[derive(Debug, Deserialize)]
 struct PublishAttestationRequest {
-    subject_agent_id: String,
+    subject_bot_id: String,
     attestation: Attestation,
 }
 
 #[derive(Debug, Deserialize)]
 struct SearchQuery {
     q: Option<String>,
-    status: Option<AgentStatus>,
+    status: Option<BotStatus>,
     capability: Option<String>,
     limit: Option<usize>,
 }
@@ -89,7 +89,7 @@ struct SearchQuery {
 #[derive(Debug, Serialize)]
 struct SearchResponse {
     count: usize,
-    results: Vec<AgentRecord>,
+    results: Vec<BotRecord>,
 }
 
 #[tokio::main]
@@ -153,12 +153,12 @@ fn app_router(state: AppState) -> Router {
         .route("/", get(root))
         .route("/docs", get(docs))
         .route("/health", get(health))
-        .route("/v1/agents", post(create_agent))
-        .route("/v1/agents/{agent_id}", get(get_agent).patch(update_agent))
-        .route("/v1/agents/{agent_id}/keys", post(add_key))
-        .route("/v1/agents/{agent_id}/keys/{key_id}", delete(remove_key))
-        .route("/v1/agents/{agent_id}/rotate", post(rotate_key))
-        .route("/v1/agents/{agent_id}/revoke", post(revoke_agent))
+        .route("/v1/bots", post(create_bot))
+        .route("/v1/bots/{bot_id}", get(get_bot).patch(update_bot))
+        .route("/v1/bots/{bot_id}/keys", post(add_key))
+        .route("/v1/bots/{bot_id}/keys/{key_id}", delete(remove_key))
+        .route("/v1/bots/{bot_id}/rotate", post(rotate_key))
+        .route("/v1/bots/{bot_id}/revoke", post(revoke_bot))
         .route("/v1/attestations", post(publish_attestation))
         .route("/v1/search", get(search))
         .route("/v1/nonce", get(get_nonce))
@@ -168,7 +168,7 @@ fn app_router(state: AppState) -> Router {
 
 async fn root() -> impl IntoResponse {
     Json(json!({
-        "service": "ai-agent-identity-registry",
+        "service": "ai-bot-identity-registry",
         "status": "ok",
         "docs": "/docs",
         "health": "/health"
@@ -182,7 +182,7 @@ async fn docs() -> impl IntoResponse {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AI Agent Registry API Docs</title>
+    <title>AI Bot Registry API Docs</title>
     <style>
       body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem auto; max-width: 920px; padding: 0 1rem; line-height: 1.45; }
       h1 { margin-bottom: 0.2rem; }
@@ -194,23 +194,23 @@ async fn docs() -> impl IntoResponse {
     </style>
   </head>
   <body>
-    <h1>AI Agent Registry API</h1>
-    <p class="muted">Starter API surface for agent identity records, keys, and policy-managed operations.</p>
+    <h1>AI Bot Registry API</h1>
+    <p class="muted">Starter API surface for bot identity records, keys, and policy-managed operations.</p>
     <p>Health check: <code>/health</code></p>
     <table>
       <thead><tr><th>Method</th><th>Path</th><th>Operation</th><th>Status</th></tr></thead>
       <tbody>
         <tr><td>GET</td><td><code>/health</code></td><td>Service health</td><td>Implemented</td></tr>
         <tr><td>GET</td><td><code>/v1/nonce</code></td><td>Issue nonce</td><td>Implemented</td></tr>
-        <tr><td>POST</td><td><code>/v1/agents</code></td><td>Create agent</td><td>Implemented</td></tr>
-        <tr><td>GET</td><td><code>/v1/agents/{agent_id}</code></td><td>Get agent</td><td>Implemented</td></tr>
-        <tr><td>PATCH</td><td><code>/v1/agents/{agent_id}</code></td><td>Update agent</td><td>Implemented</td></tr>
-        <tr><td>POST</td><td><code>/v1/agents/{agent_id}/keys</code></td><td>Add key</td><td>Implemented</td></tr>
-        <tr><td>DELETE</td><td><code>/v1/agents/{agent_id}/keys/{key_id}</code></td><td>Remove key</td><td>Implemented</td></tr>
-        <tr><td>POST</td><td><code>/v1/agents/{agent_id}/rotate</code></td><td>Rotate key</td><td>Implemented</td></tr>
-        <tr><td>POST</td><td><code>/v1/agents/{agent_id}/revoke</code></td><td>Revoke agent</td><td>Implemented</td></tr>
+        <tr><td>POST</td><td><code>/v1/bots</code></td><td>Create bot</td><td>Implemented</td></tr>
+        <tr><td>GET</td><td><code>/v1/bots/{bot_id}</code></td><td>Get bot</td><td>Implemented</td></tr>
+        <tr><td>PATCH</td><td><code>/v1/bots/{bot_id}</code></td><td>Update bot</td><td>Implemented</td></tr>
+        <tr><td>POST</td><td><code>/v1/bots/{bot_id}/keys</code></td><td>Add key</td><td>Implemented</td></tr>
+        <tr><td>DELETE</td><td><code>/v1/bots/{bot_id}/keys/{key_id}</code></td><td>Remove key</td><td>Implemented</td></tr>
+        <tr><td>POST</td><td><code>/v1/bots/{bot_id}/rotate</code></td><td>Rotate key</td><td>Implemented</td></tr>
+        <tr><td>POST</td><td><code>/v1/bots/{bot_id}/revoke</code></td><td>Revoke bot</td><td>Implemented</td></tr>
         <tr><td>POST</td><td><code>/v1/attestations</code></td><td>Publish attestation</td><td>Implemented</td></tr>
-        <tr><td>GET</td><td><code>/v1/search</code></td><td>Search agents</td><td>Implemented</td></tr>
+        <tr><td>GET</td><td><code>/v1/search</code></td><td>Search bots</td><td>Implemented</td></tr>
       </tbody>
     </table>
   </body>
@@ -223,11 +223,11 @@ async fn health() -> impl IntoResponse {
     Json(json!({"status": "ok"}))
 }
 
-async fn create_agent(
+async fn create_bot(
     State(state): State<AppState>,
-    Json(mut incoming): Json<AgentRecord>,
+    Json(mut incoming): Json<BotRecord>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    validate_agent_record(&incoming).map_err(invalid)?;
+    validate_bot_record(&incoming).map_err(invalid)?;
 
     verify_record_signatures(&incoming, &incoming, state.store.as_ref())
         .await
@@ -242,61 +242,57 @@ async fn create_agent(
     let (_, pk_bytes) = multibase::decode(&primary.public_key_multibase)
         .map_err(|e| invalid(anyhow::anyhow!("invalid multibase key: {e}")))?;
 
-    let agent_id = derive_agent_id(&pk_bytes);
+    let bot_id = derive_bot_id(&pk_bytes);
     let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
-    incoming.agent_id = Some(agent_id.clone());
+    incoming.bot_id = Some(bot_id.clone());
     incoming.version = Some(1);
     incoming.created_at = Some(now.clone());
     incoming.updated_at = Some(now);
 
     if state
         .store
-        .get_agent(&agent_id)
+        .get_bot(&bot_id)
         .await
         .map_err(internal)?
         .is_some()
     {
         return Err((
             StatusCode::CONFLICT,
-            Json(json!({"error": "agent already exists"})),
+            Json(json!({"error": "bot already exists"})),
         ));
     }
-    state
-        .store
-        .create_agent(&incoming)
-        .await
-        .map_err(internal)?;
+    state.store.create_bot(&incoming).await.map_err(internal)?;
 
     Ok((StatusCode::CREATED, Json(incoming)))
 }
 
-async fn get_agent(
+async fn get_bot(
     State(state): State<AppState>,
-    Path(agent_id): Path<String>,
+    Path(bot_id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let Some(agent) = state.store.get_agent(&agent_id).await.map_err(internal)? else {
+    let Some(bot) = state.store.get_bot(&bot_id).await.map_err(internal)? else {
         return Err((StatusCode::NOT_FOUND, Json(json!({"error": "not found"}))));
     };
-    Ok((StatusCode::OK, Json(agent)))
+    Ok((StatusCode::OK, Json(bot)))
 }
 
-async fn update_agent(
+async fn update_bot(
     State(state): State<AppState>,
-    Path(agent_id): Path<String>,
-    Json(mut incoming): Json<AgentRecord>,
+    Path(bot_id): Path<String>,
+    Json(mut incoming): Json<BotRecord>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let current = state
         .store
-        .get_agent(&agent_id)
+        .get_bot(&bot_id)
         .await
         .map_err(internal)?
         .ok_or_else(|| (StatusCode::NOT_FOUND, Json(json!({"error": "not found"}))))?;
 
     // keep identity and immutable metadata server-managed
-    incoming.agent_id = Some(agent_id.clone());
+    incoming.bot_id = Some(bot_id.clone());
     incoming.created_at = current.created_at.clone();
 
-    validate_agent_record(&incoming).map_err(invalid)?;
+    validate_bot_record(&incoming).map_err(invalid)?;
     let valid_signers = verify_record_signatures(&incoming, &current, state.store.as_ref())
         .await
         .map_err(invalid)?;
@@ -308,30 +304,24 @@ async fn update_agent(
     incoming.version = Some(version);
     incoming.updated_at = Some(Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true));
 
-    state
-        .store
-        .update_agent(&incoming)
-        .await
-        .map_err(internal)?;
+    state.store.update_bot(&incoming).await.map_err(internal)?;
     Ok((StatusCode::OK, Json(incoming)))
 }
 
 async fn add_key(
     State(state): State<AppState>,
-    Path(agent_id): Path<String>,
+    Path(bot_id): Path<String>,
     Json(request): Json<AddKeyRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let current = state
         .store
-        .get_agent(&agent_id)
+        .get_bot(&bot_id)
         .await
         .map_err(internal)?
         .ok_or_else(|| (StatusCode::NOT_FOUND, Json(json!({"error": "not found"}))))?;
 
-    if current.status == AgentStatus::Revoked {
-        return Err(invalid(anyhow::anyhow!(
-            "cannot add key to a revoked agent"
-        )));
+    if current.status == BotStatus::Revoked {
+        return Err(invalid(anyhow::anyhow!("cannot add key to a revoked bot")));
     }
 
     if current
@@ -368,36 +358,36 @@ async fn add_key(
     updated.proof = request.proof;
     updated.proof_set = request.proof_set;
 
-    validate_agent_record(&updated).map_err(invalid)?;
+    validate_bot_record(&updated).map_err(invalid)?;
     let valid_signers = verify_record_signatures(&updated, &current, state.store.as_ref())
         .await
         .map_err(invalid)?;
     evaluate_threshold(current.policy.as_ref(), Operation::AddKey, &valid_signers)
         .map_err(invalid)?;
 
-    updated.agent_id = Some(agent_id.clone());
+    updated.bot_id = Some(bot_id.clone());
     updated.created_at = current.created_at.clone();
     updated.version = Some(current.version.unwrap_or(1) + 1);
     updated.updated_at = Some(Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true));
 
-    state.store.update_agent(&updated).await.map_err(internal)?;
+    state.store.update_bot(&updated).await.map_err(internal)?;
     Ok((StatusCode::OK, Json(updated)))
 }
 
 async fn remove_key(
     State(state): State<AppState>,
-    Path((agent_id, key_id)): Path<(String, String)>,
+    Path((bot_id, key_id)): Path<(String, String)>,
     Json(request): Json<RemoveKeyRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let current = state
         .store
-        .get_agent(&agent_id)
+        .get_bot(&bot_id)
         .await
         .map_err(internal)?
         .ok_or_else(|| (StatusCode::NOT_FOUND, Json(json!({"error": "not found"}))))?;
 
-    if current.status == AgentStatus::Revoked {
-        return Err(invalid(anyhow::anyhow!("agent is already revoked")));
+    if current.status == BotStatus::Revoked {
+        return Err(invalid(anyhow::anyhow!("bot is already revoked")));
     }
 
     let mut updated = current.clone();
@@ -434,7 +424,7 @@ async fn remove_key(
         replacement.primary = Some(true);
     }
 
-    validate_agent_record(&updated).map_err(invalid)?;
+    validate_bot_record(&updated).map_err(invalid)?;
     let valid_signers = verify_record_signatures(&updated, &current, state.store.as_ref())
         .await
         .map_err(invalid)?;
@@ -445,29 +435,29 @@ async fn remove_key(
     )
     .map_err(invalid)?;
 
-    updated.agent_id = Some(agent_id.clone());
+    updated.bot_id = Some(bot_id.clone());
     updated.created_at = current.created_at.clone();
     updated.version = Some(current.version.unwrap_or(1) + 1);
     updated.updated_at = Some(Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true));
-    state.store.update_agent(&updated).await.map_err(internal)?;
+    state.store.update_bot(&updated).await.map_err(internal)?;
     Ok((StatusCode::OK, Json(updated)))
 }
 
 async fn rotate_key(
     State(state): State<AppState>,
-    Path(agent_id): Path<String>,
+    Path(bot_id): Path<String>,
     Json(request): Json<RotateKeyRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let current = state
         .store
-        .get_agent(&agent_id)
+        .get_bot(&bot_id)
         .await
         .map_err(internal)?
         .ok_or_else(|| (StatusCode::NOT_FOUND, Json(json!({"error": "not found"}))))?;
 
-    if current.status == AgentStatus::Revoked {
+    if current.status == BotStatus::Revoked {
         return Err(invalid(anyhow::anyhow!(
-            "cannot rotate key on a revoked agent"
+            "cannot rotate key on a revoked bot"
         )));
     }
 
@@ -532,7 +522,7 @@ async fn rotate_key(
     }
 
     updated.public_keys.push(new_key);
-    validate_agent_record(&updated).map_err(invalid)?;
+    validate_bot_record(&updated).map_err(invalid)?;
     let valid_signers = verify_record_signatures(&updated, &current, state.store.as_ref())
         .await
         .map_err(invalid)?;
@@ -543,23 +533,23 @@ async fn rotate_key(
     )
     .map_err(invalid)?;
 
-    updated.agent_id = Some(agent_id.clone());
+    updated.bot_id = Some(bot_id.clone());
     updated.created_at = current.created_at.clone();
     updated.version = Some(current.version.unwrap_or(1) + 1);
     updated.updated_at = Some(Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true));
 
-    state.store.update_agent(&updated).await.map_err(internal)?;
+    state.store.update_bot(&updated).await.map_err(internal)?;
     Ok((StatusCode::OK, Json(updated)))
 }
 
-async fn revoke_agent(
+async fn revoke_bot(
     State(state): State<AppState>,
-    Path(agent_id): Path<String>,
-    Json(request): Json<RevokeAgentRequest>,
+    Path(bot_id): Path<String>,
+    Json(request): Json<RevokeBotRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let current = state
         .store
-        .get_agent(&agent_id)
+        .get_bot(&bot_id)
         .await
         .map_err(internal)?
         .ok_or_else(|| (StatusCode::NOT_FOUND, Json(json!({"error": "not found"}))))?;
@@ -568,7 +558,7 @@ async fn revoke_agent(
     updated.proof = request.proof;
     updated.proof_set = request.proof_set;
     let effective_time = first_proof_created_at(&updated).map_err(invalid)?;
-    updated.status = AgentStatus::Revoked;
+    updated.status = BotStatus::Revoked;
     for key in &mut updated.public_keys {
         if key.revoked_at.is_none() {
             key.revoked_at = Some(effective_time.clone());
@@ -577,25 +567,25 @@ async fn revoke_agent(
             key.revocation_reason = request
                 .reason
                 .clone()
-                .or_else(|| Some("agent revoked".to_string()));
+                .or_else(|| Some("bot revoked".to_string()));
         }
     }
-    validate_agent_record(&updated).map_err(invalid)?;
+    validate_bot_record(&updated).map_err(invalid)?;
     let valid_signers = verify_record_signatures(&updated, &current, state.store.as_ref())
         .await
         .map_err(invalid)?;
     evaluate_threshold(
         current.policy.as_ref(),
-        Operation::RevokeAgent,
+        Operation::RevokeBot,
         &valid_signers,
     )
     .map_err(invalid)?;
 
-    updated.agent_id = Some(agent_id.clone());
+    updated.bot_id = Some(bot_id.clone());
     updated.created_at = current.created_at.clone();
     updated.version = Some(current.version.unwrap_or(1) + 1);
     updated.updated_at = Some(Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true));
-    state.store.update_agent(&updated).await.map_err(internal)?;
+    state.store.update_bot(&updated).await.map_err(internal)?;
 
     Ok((StatusCode::OK, Json(updated)))
 }
@@ -606,24 +596,24 @@ async fn publish_attestation(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let subject = state
         .store
-        .get_agent(&request.subject_agent_id)
+        .get_bot(&request.subject_bot_id)
         .await
         .map_err(internal)?
         .ok_or_else(|| {
             (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": "subject agent not found"})),
+                Json(json!({"error": "subject bot not found"})),
             )
         })?;
     let issuer = state
         .store
-        .get_agent(&request.attestation.issuer_agent_id)
+        .get_bot(&request.attestation.issuer_bot_id)
         .await
         .map_err(internal)?
         .ok_or_else(|| {
             (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": "issuer agent not found"})),
+                Json(json!({"error": "issuer bot not found"})),
             )
         })?;
 
@@ -634,8 +624,8 @@ async fn publish_attestation(
         .ok_or_else(|| invalid(anyhow::anyhow!("issuer key_id not found")))?;
 
     let payload = AttestationPayload {
-        subject_agent_id: &request.subject_agent_id,
-        issuer_agent_id: &request.attestation.issuer_agent_id,
+        subject_bot_id: &request.subject_bot_id,
+        issuer_bot_id: &request.attestation.issuer_bot_id,
         attestation_type: &request.attestation.r#type,
         statement: &request.attestation.statement,
         issued_at: &request.attestation.issued_at,
@@ -658,7 +648,7 @@ async fn publish_attestation(
     updated_subject.updated_at = Some(Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true));
     state
         .store
-        .update_agent(&updated_subject)
+        .update_bot(&updated_subject)
         .await
         .map_err(internal)?;
 
@@ -669,7 +659,7 @@ async fn search(
     State(state): State<AppState>,
     Query(query): Query<SearchQuery>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let mut results = state.store.list_agents().await.map_err(internal)?;
+    let mut results = state.store.list_bots().await.map_err(internal)?;
 
     if let Some(status) = query.status {
         results.retain(|r| r.status == status);
@@ -688,7 +678,7 @@ async fn search(
     if let Some(q) = query.q {
         let q = q.to_ascii_lowercase();
         results.retain(|r| {
-            r.agent_id
+            r.bot_id
                 .as_deref()
                 .map(|id| id.to_ascii_lowercase().contains(&q))
                 .unwrap_or(false)
@@ -703,7 +693,7 @@ async fn search(
         });
     }
 
-    results.sort_by_key(|r| r.agent_id.clone().unwrap_or_default());
+    results.sort_by_key(|r| r.bot_id.clone().unwrap_or_default());
     let limit = query.limit.unwrap_or(50).min(200);
     results.truncate(limit);
 
@@ -722,8 +712,8 @@ async fn get_nonce(
 
 #[derive(Serialize)]
 struct AttestationPayload<'a> {
-    subject_agent_id: &'a str,
-    issuer_agent_id: &'a str,
+    subject_bot_id: &'a str,
+    issuer_bot_id: &'a str,
     #[serde(rename = "type")]
     attestation_type: &'a str,
     statement: &'a serde_json::Value,
@@ -732,8 +722,8 @@ struct AttestationPayload<'a> {
 }
 
 async fn verify_record_signatures(
-    incoming: &AgentRecord,
-    signer_source: &AgentRecord,
+    incoming: &BotRecord,
+    signer_source: &BotRecord,
     store: &dyn Storage,
 ) -> anyhow::Result<Vec<(Option<String>, String)>> {
     let proofs = unified_proofs(incoming)?;
@@ -752,7 +742,7 @@ async fn verify_record_signatures(
         let key = resolve_signing_key(signer_source, store, &proof.key_ref).await?;
         verify_signature_with_key(&proof.jws, &canon, &key)?;
         valid_signers.push((
-            proof.key_ref.controller_agent_id.clone(),
+            proof.key_ref.controller_bot_id.clone(),
             proof.key_ref.key_id.clone(),
         ));
     }
@@ -769,32 +759,33 @@ fn verify_signature_with_key(jws: &str, payload: &[u8], key: &PublicKey) -> anyh
 }
 
 async fn resolve_signing_key(
-    signer_source: &AgentRecord,
+    signer_source: &BotRecord,
     store: &dyn Storage,
     key_ref: &KeyRef,
 ) -> anyhow::Result<PublicKey> {
-    if let Some(controller_agent_id) = &key_ref.controller_agent_id {
+    if let Some(controller_bot_id) = &key_ref.controller_bot_id {
         let allowed = signer_source
             .controllers
             .as_ref()
             .map(|controllers| {
                 controllers
                     .iter()
-                    .any(|c| c.controller_agent_id == *controller_agent_id)
+                    .any(|c| c.controller_bot_id == *controller_bot_id)
             })
             .unwrap_or(false);
         if !allowed {
             anyhow::bail!(
-                "controller {} is not registered for this agent",
-                controller_agent_id
+                "controller {} is not registered for this bot",
+                controller_bot_id
             );
         }
 
-        let controller = store.get_agent(controller_agent_id).await?.ok_or_else(|| {
-            anyhow::anyhow!("controller agent not found: {}", controller_agent_id)
-        })?;
-        if controller.status == AgentStatus::Revoked {
-            anyhow::bail!("controller {} is revoked", controller_agent_id);
+        let controller = store
+            .get_bot(controller_bot_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("controller bot not found: {}", controller_bot_id))?;
+        if controller.status == BotStatus::Revoked {
+            anyhow::bail!("controller {} is revoked", controller_bot_id);
         }
 
         return controller
@@ -813,7 +804,7 @@ async fn resolve_signing_key(
         .ok_or_else(|| anyhow::anyhow!("signing key_id not found or revoked"))
 }
 
-fn unified_proofs(record: &AgentRecord) -> anyhow::Result<Vec<ProofItem>> {
+fn unified_proofs(record: &BotRecord) -> anyhow::Result<Vec<ProofItem>> {
     match (&record.proof, &record.proof_set) {
         (Some(_), Some(_)) => anyhow::bail!("provide either proof or proof_set, not both"),
         (None, None) => anyhow::bail!("missing proof/proof_set"),
@@ -821,7 +812,7 @@ fn unified_proofs(record: &AgentRecord) -> anyhow::Result<Vec<ProofItem>> {
             algorithm: p.algorithm.clone(),
             key_ref: KeyRef {
                 key_id: p.key_id.clone(),
-                controller_agent_id: None,
+                controller_bot_id: None,
             },
             created: p.created.clone(),
             nonce: p.nonce.clone(),
@@ -836,7 +827,7 @@ fn unified_proofs(record: &AgentRecord) -> anyhow::Result<Vec<ProofItem>> {
     }
 }
 
-fn first_proof_created_at(record: &AgentRecord) -> anyhow::Result<String> {
+fn first_proof_created_at(record: &BotRecord) -> anyhow::Result<String> {
     let proofs = unified_proofs(record)?;
     proofs
         .first()
@@ -845,14 +836,14 @@ fn first_proof_created_at(record: &AgentRecord) -> anyhow::Result<String> {
 }
 
 #[allow(dead_code)]
-fn unify_proofs(record: &AgentRecord) -> Option<Vec<ProofItem>> {
+fn unify_proofs(record: &BotRecord) -> Option<Vec<ProofItem>> {
     record.proof_set.clone().or_else(|| {
         record.proof.clone().map(|p| {
             vec![ProofItem {
                 algorithm: p.algorithm,
                 key_ref: KeyRef {
                     key_id: p.key_id,
-                    controller_agent_id: None,
+                    controller_bot_id: None,
                 },
                 created: p.created,
                 nonce: p.nonce,
@@ -882,18 +873,18 @@ mod tests {
     use axum::body::Body;
     use ed25519_dalek::SigningKey;
     use http::{Request, StatusCode};
-    use identity_core::{AgentStatus, Attestation, Proof, PublicKey, SignatureRef};
+    use identity_core::{Attestation, BotStatus, Proof, PublicKey, SignatureRef};
     use identity_crypto::sign_compact_jws;
     use rand::rngs::OsRng;
     use serde_json::json;
     use tower::util::ServiceExt;
 
-    fn unsigned_record(signing_key: &SigningKey, key_id: &str) -> AgentRecord {
-        AgentRecord {
-            agent_id: None,
+    fn unsigned_record(signing_key: &SigningKey, key_id: &str) -> BotRecord {
+        BotRecord {
+            bot_id: None,
             version: None,
-            status: AgentStatus::Active,
-            display_name: Some("Example Agent".to_string()),
+            status: BotStatus::Active,
+            display_name: Some("Example Bot".to_string()),
             description: Some("For tests".to_string()),
             owner: None,
             public_keys: vec![PublicKey {
@@ -914,7 +905,7 @@ mod tests {
             endpoints: None,
             capabilities: None,
             controllers: None,
-            parent_agent_id: None,
+            parent_bot_id: None,
             policy: None,
             attestations: None,
             evidence: None,
@@ -925,12 +916,12 @@ mod tests {
         }
     }
 
-    fn sign_record(record: &mut AgentRecord, signing_key: &SigningKey, key_id: &str) {
+    fn sign_record(record: &mut BotRecord, signing_key: &SigningKey, key_id: &str) {
         sign_record_with_created(record, signing_key, key_id, "2026-02-15T00:00:00Z");
     }
 
     fn sign_record_with_created(
-        record: &mut AgentRecord,
+        record: &mut BotRecord,
         signing_key: &SigningKey,
         key_id: &str,
         created: &str,
@@ -947,12 +938,12 @@ mod tests {
         });
     }
 
-    async fn create_agent_for_test(
+    async fn create_bot_for_test(
         app: &Router,
         signing_key: &SigningKey,
         key_id: &str,
         name: &str,
-    ) -> (String, AgentRecord) {
+    ) -> (String, BotRecord) {
         let mut create = unsigned_record(signing_key, key_id);
         create.display_name = Some(name.to_string());
         sign_record(&mut create, signing_key, key_id);
@@ -962,7 +953,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/v1/agents")
+                    .uri("/v1/bots")
                     .header("content-type", "application/json")
                     .body(Body::from(
                         serde_json::to_vec(&create).expect("encode create"),
@@ -973,12 +964,9 @@ mod tests {
             .expect("create request");
         assert_eq!(create_response.status(), StatusCode::CREATED);
         let created_json = body_json(create_response).await;
-        let agent_id = created_json["agent_id"]
-            .as_str()
-            .expect("agent id")
-            .to_string();
+        let bot_id = created_json["bot_id"].as_str().expect("bot id").to_string();
         let created = serde_json::from_value(created_json).expect("created record");
-        (agent_id, created)
+        (bot_id, created)
     }
 
     async fn body_json(response: axum::response::Response) -> serde_json::Value {
@@ -1029,12 +1017,12 @@ mod tests {
             .await
             .expect("body");
         let body = String::from_utf8(bytes.to_vec()).expect("utf8");
-        assert!(body.contains("AI Agent Registry API"));
-        assert!(body.contains("/v1/agents"));
+        assert!(body.contains("AI Bot Registry API"));
+        assert!(body.contains("/v1/bots"));
     }
 
     #[tokio::test]
-    async fn create_get_and_update_agent_success() {
+    async fn create_get_and_update_bot_success() {
         let app = app_router(AppState::default());
         let mut rng = OsRng;
         let signing_key = SigningKey::generate(&mut rng);
@@ -1048,7 +1036,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/v1/agents")
+                    .uri("/v1/bots")
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_vec(&create).unwrap()))
                     .unwrap(),
@@ -1058,14 +1046,14 @@ mod tests {
 
         assert_eq!(create_response.status(), StatusCode::CREATED);
         let created = body_json(create_response).await;
-        let agent_id = created["agent_id"].as_str().expect("agent id").to_string();
+        let bot_id = created["bot_id"].as_str().expect("bot id").to_string();
         assert_eq!(created["version"], 1);
 
         let get_response = app
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri(format!("/v1/agents/{agent_id}"))
+                    .uri(format!("/v1/bots/{bot_id}"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -1073,7 +1061,7 @@ mod tests {
             .expect("get request");
         assert_eq!(get_response.status(), StatusCode::OK);
 
-        let mut update = serde_json::from_value::<AgentRecord>(created).expect("record");
+        let mut update = serde_json::from_value::<BotRecord>(created).expect("record");
         update.display_name = Some("Updated Name".to_string());
         sign_record(&mut update, &signing_key, key_id);
 
@@ -1081,7 +1069,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("PATCH")
-                    .uri(format!("/v1/agents/{agent_id}"))
+                    .uri(format!("/v1/bots/{bot_id}"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_vec(&update).unwrap()))
                     .unwrap(),
@@ -1106,7 +1094,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/v1/agents")
+                    .uri("/v1/bots")
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_vec(&create).unwrap()))
                     .unwrap(),
@@ -1133,7 +1121,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/v1/agents")
+                    .uri("/v1/bots")
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_vec(&create).unwrap()))
                     .unwrap(),
@@ -1145,21 +1133,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn update_rejects_unknown_agent() {
+    async fn update_rejects_unknown_bot() {
         let app = app_router(AppState::default());
         let mut rng = OsRng;
         let signing_key = SigningKey::generate(&mut rng);
         let key_id = "k1";
 
         let mut update = unsigned_record(&signing_key, key_id);
-        update.agent_id = Some("urn:agent:sha256:missing".to_string());
+        update.bot_id = Some("urn:bot:sha256:missing".to_string());
         sign_record(&mut update, &signing_key, key_id);
 
         let response = app
             .oneshot(
                 Request::builder()
                     .method("PATCH")
-                    .uri("/v1/agents/urn%3Aagent%3Asha256%3Amissing")
+                    .uri("/v1/bots/urn%3Abot%3Asha256%3Amissing")
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_vec(&update).unwrap()))
                     .unwrap(),
@@ -1193,7 +1181,7 @@ mod tests {
         let mut rng = OsRng;
         let signer = SigningKey::generate(&mut rng);
 
-        let (agent_id, created) = create_agent_for_test(&app, &signer, "k1", "add-key").await;
+        let (bot_id, created) = create_bot_for_test(&app, &signer, "k1", "add-key").await;
 
         let added_key = SigningKey::generate(&mut rng);
         let new_key = PublicKey {
@@ -1227,7 +1215,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(format!("/v1/agents/{agent_id}/keys"))
+                    .uri(format!("/v1/bots/{bot_id}/keys"))
                     .header("content-type", "application/json")
                     .body(Body::from(
                         serde_json::to_vec(&request).expect("encode add-key"),
@@ -1248,7 +1236,7 @@ mod tests {
         let mut rng = OsRng;
         let signer = SigningKey::generate(&mut rng);
 
-        let (agent_id, created) = create_agent_for_test(&app, &signer, "k1", "remove-key").await;
+        let (bot_id, created) = create_bot_for_test(&app, &signer, "k1", "remove-key").await;
 
         let second_key = SigningKey::generate(&mut rng);
         let new_key = PublicKey {
@@ -1278,7 +1266,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(format!("/v1/agents/{agent_id}/keys"))
+                    .uri(format!("/v1/bots/{bot_id}/keys"))
                     .header("content-type", "application/json")
                     .body(Body::from(
                         serde_json::to_vec(&add_request).expect("encode add request"),
@@ -1288,7 +1276,7 @@ mod tests {
             .await
             .expect("add key");
         assert_eq!(add_response.status(), StatusCode::OK);
-        let added_record: AgentRecord =
+        let added_record: BotRecord =
             serde_json::from_value(body_json(add_response).await).expect("added");
 
         let created_at = "2026-02-15T01:02:03Z";
@@ -1311,7 +1299,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("DELETE")
-                    .uri(format!("/v1/agents/{agent_id}/keys/k2"))
+                    .uri(format!("/v1/bots/{bot_id}/keys/k2"))
                     .header("content-type", "application/json")
                     .body(Body::from(
                         serde_json::to_vec(&remove_request).expect("encode remove"),
@@ -1336,7 +1324,7 @@ mod tests {
         let app = app_router(AppState::default());
         let mut rng = OsRng;
         let signer = SigningKey::generate(&mut rng);
-        let (agent_id, created) = create_agent_for_test(&app, &signer, "k1", "rotate").await;
+        let (bot_id, created) = create_bot_for_test(&app, &signer, "k1", "rotate").await;
 
         let new_signing = SigningKey::generate(&mut rng);
         let new_key = PublicKey {
@@ -1378,7 +1366,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(format!("/v1/agents/{agent_id}/rotate"))
+                    .uri(format!("/v1/bots/{bot_id}/rotate"))
                     .header("content-type", "application/json")
                     .body(Body::from(
                         serde_json::to_vec(&request).expect("encode rotate"),
@@ -1398,15 +1386,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn revoke_agent_endpoint_marks_status_revoked() {
+    async fn revoke_bot_endpoint_marks_status_revoked() {
         let app = app_router(AppState::default());
         let mut rng = OsRng;
         let signer = SigningKey::generate(&mut rng);
-        let (agent_id, created) = create_agent_for_test(&app, &signer, "k1", "revoke").await;
+        let (bot_id, created) = create_bot_for_test(&app, &signer, "k1", "revoke").await;
 
         let created_at = "2026-02-15T02:00:00Z";
         let mut revoke_candidate = created.clone();
-        revoke_candidate.status = AgentStatus::Revoked;
+        revoke_candidate.status = BotStatus::Revoked;
         revoke_candidate.public_keys.iter_mut().for_each(|k| {
             k.revoked_at = Some(created_at.to_string());
             k.revocation_reason = Some("sunset".to_string());
@@ -1421,7 +1409,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(format!("/v1/agents/{agent_id}/revoke"))
+                    .uri(format!("/v1/bots/{bot_id}/revoke"))
                     .header("content-type", "application/json")
                     .body(Body::from(
                         serde_json::to_vec(&request).expect("encode revoke"),
@@ -1444,13 +1432,12 @@ mod tests {
         let issuer_signer = SigningKey::generate(&mut rng);
 
         let (subject_id, _) =
-            create_agent_for_test(&app, &subject_signer, "subject-k1", "subject").await;
-        let (issuer_id, _) =
-            create_agent_for_test(&app, &issuer_signer, "issuer-k1", "issuer").await;
+            create_bot_for_test(&app, &subject_signer, "subject-k1", "subject").await;
+        let (issuer_id, _) = create_bot_for_test(&app, &issuer_signer, "issuer-k1", "issuer").await;
 
         let mut attestation = Attestation {
             attestation_id: None,
-            issuer_agent_id: issuer_id.clone(),
+            issuer_bot_id: issuer_id.clone(),
             r#type: "capability".to_string(),
             statement: json!({"allows": ["calendar.read"]}),
             signature: SignatureRef {
@@ -1463,8 +1450,8 @@ mod tests {
         };
 
         let payload = AttestationPayload {
-            subject_agent_id: &subject_id,
-            issuer_agent_id: &attestation.issuer_agent_id,
+            subject_bot_id: &subject_id,
+            issuer_bot_id: &attestation.issuer_bot_id,
             attestation_type: &attestation.r#type,
             statement: &attestation.statement,
             issued_at: &attestation.issued_at,
@@ -1475,7 +1462,7 @@ mod tests {
             sign_compact_jws(&canon, &issuer_signer, "issuer-k1", true).expect("sign attestation");
 
         let request = json!({
-            "subject_agent_id": subject_id,
+            "subject_bot_id": subject_id,
             "attestation": attestation,
         });
         let response = app
@@ -1497,7 +1484,7 @@ mod tests {
         let get_subject = app
             .oneshot(
                 Request::builder()
-                    .uri(format!("/v1/agents/{subject_id}"))
+                    .uri(format!("/v1/bots/{subject_id}"))
                     .body(Body::empty())
                     .expect("request"),
             )
@@ -1520,8 +1507,8 @@ mod tests {
         let signer_a = SigningKey::generate(&mut rng);
         let signer_b = SigningKey::generate(&mut rng);
 
-        let _ = create_agent_for_test(&app, &signer_a, "k1", "Alpha Agent").await;
-        let _ = create_agent_for_test(&app, &signer_b, "k1", "Beta Agent").await;
+        let _ = create_bot_for_test(&app, &signer_a, "k1", "Alpha Bot").await;
+        let _ = create_bot_for_test(&app, &signer_b, "k1", "Beta Bot").await;
 
         let response = app
             .oneshot(
@@ -1539,7 +1526,7 @@ mod tests {
             body["results"][0]["display_name"]
                 .as_str()
                 .expect("display_name"),
-            "Alpha Agent"
+            "Alpha Bot"
         );
     }
 

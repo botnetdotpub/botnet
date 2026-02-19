@@ -1,24 +1,21 @@
 use async_trait::async_trait;
-use identity_core::{AgentRecord, Policy, PublicKey};
+use identity_core::{BotRecord, Policy, PublicKey};
 
 #[async_trait]
 pub trait Storage: Send + Sync {
-    async fn create_agent(&self, record: &AgentRecord) -> anyhow::Result<AgentRecord>;
-    async fn get_agent(&self, agent_id: &str) -> anyhow::Result<Option<AgentRecord>>;
-    async fn list_agents(&self) -> anyhow::Result<Vec<AgentRecord>>;
-    async fn update_agent(&self, record: &AgentRecord) -> anyhow::Result<AgentRecord>;
+    async fn create_bot(&self, record: &BotRecord) -> anyhow::Result<BotRecord>;
+    async fn get_bot(&self, bot_id: &str) -> anyhow::Result<Option<BotRecord>>;
+    async fn list_bots(&self) -> anyhow::Result<Vec<BotRecord>>;
+    async fn update_bot(&self, record: &BotRecord) -> anyhow::Result<BotRecord>;
 
-    async fn get_policy(&self, agent_id: &str) -> anyhow::Result<Option<Policy>>;
+    async fn get_policy(&self, bot_id: &str) -> anyhow::Result<Option<Policy>>;
 
-    async fn get_agent_pubkey(
-        &self,
-        agent_id: &str,
-        key_id: &str,
-    ) -> anyhow::Result<Option<PublicKey>>;
+    async fn get_bot_pubkey(&self, bot_id: &str, key_id: &str)
+        -> anyhow::Result<Option<PublicKey>>;
     async fn get_controller_pubkey(
         &self,
-        target_agent_id: &str,
-        controller_agent_id: &str,
+        target_bot_id: &str,
+        controller_bot_id: &str,
         key_id: &str,
     ) -> anyhow::Result<Option<PublicKey>>;
 

@@ -1,6 +1,6 @@
 use crate::storage::Storage;
 use async_trait::async_trait;
-use identity_core::{AgentRecord, Policy, PublicKey};
+use identity_core::{BotRecord, Policy, PublicKey};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -8,64 +8,64 @@ use uuid::Uuid;
 
 #[derive(Clone, Default)]
 pub struct MemoryStore {
-    agents: Arc<RwLock<HashMap<String, AgentRecord>>>,
+    bots: Arc<RwLock<HashMap<String, BotRecord>>>,
     nonces: Arc<RwLock<HashMap<String, bool>>>,
 }
 
 #[async_trait]
 impl Storage for MemoryStore {
-    async fn create_agent(&self, record: &AgentRecord) -> anyhow::Result<AgentRecord> {
-        let agent_id = record
-            .agent_id
+    async fn create_bot(&self, record: &BotRecord) -> anyhow::Result<BotRecord> {
+        let bot_id = record
+            .bot_id
             .clone()
-            .ok_or_else(|| anyhow::anyhow!("agent_id required before create"))?;
+            .ok_or_else(|| anyhow::anyhow!("bot_id required before create"))?;
 
-        let mut agents = self.agents.write().await;
-        if agents.contains_key(&agent_id) {
-            anyhow::bail!("agent already exists");
+        let mut bots = self.bots.write().await;
+        if bots.contains_key(&bot_id) {
+            anyhow::bail!("bot already exists");
         }
-        agents.insert(agent_id, record.clone());
+        bots.insert(bot_id, record.clone());
         Ok(record.clone())
     }
 
-    async fn get_agent(&self, agent_id: &str) -> anyhow::Result<Option<AgentRecord>> {
-        let agents = self.agents.read().await;
-        Ok(agents.get(agent_id).cloned())
+    async fn get_bot(&self, bot_id: &str) -> anyhow::Result<Option<BotRecord>> {
+        let bots = self.bots.read().await;
+        Ok(bots.get(bot_id).cloned())
     }
 
-    async fn list_agents(&self) -> anyhow::Result<Vec<AgentRecord>> {
-        let agents = self.agents.read().await;
-        Ok(agents.values().cloned().collect())
+    async fn list_bots(&self) -> anyhow::Result<Vec<BotRecord>> {
+        let bots = self.bots.read().await;
+        Ok(bots.values().cloned().collect())
     }
 
-    async fn update_agent(&self, record: &AgentRecord) -> anyhow::Result<AgentRecord> {
-        let agent_id = record
-            .agent_id
+    async fn update_bot(&self, record: &BotRecord) -> anyhow::Result<BotRecord> {
+        let bot_id = record
+            .bot_id
             .clone()
-            .ok_or_else(|| anyhow::anyhow!("agent_id required before update"))?;
+            .ok_or_else(|| anyhow::anyhow!("bot_id required before update"))?;
 
-        let mut agents = self.agents.write().await;
-        if !agents.contains_key(&agent_id) {
-            anyhow::bail!("agent not found");
+        let mut bots = self.bots.write().await;
+        if !bots.contains_key(&bot_id) {
+            anyhow::bail!("bot not found");
         }
-        agents.insert(agent_id, record.clone());
+        bots.insert(bot_id, record.clone());
         Ok(record.clone())
     }
 
-    async fn get_policy(&self, agent_id: &str) -> anyhow::Result<Option<Policy>> {
+    async fn get_policy(&self, bot_id: &str) -> anyhow::Result<Option<Policy>> {
         Ok(self
-            .get_agent(agent_id)
+            .get_bot(bot_id)
             .await?
             .and_then(|record| record.policy.clone()))
     }
 
-    async fn get_agent_pubkey(
+    async fn get_bot_pubkey(
         &self,
-        agent_id: &str,
+        bot_id: &str,
         key_id: &str,
     ) -> anyhow::Result<Option<PublicKey>> {
         let key = self
-            .get_agent(agent_id)
+            .get_bot(bot_id)
             .await?
             .and_then(|record| record.public_keys.into_iter().find(|k| k.key_id == key_id));
         Ok(key)
@@ -73,11 +73,11 @@ impl Storage for MemoryStore {
 
     async fn get_controller_pubkey(
         &self,
-        target_agent_id: &str,
-        controller_agent_id: &str,
+        target_bot_id: &str,
+        controller_bot_id: &str,
         key_id: &str,
     ) -> anyhow::Result<Option<PublicKey>> {
-        let Some(target) = self.get_agent(target_agent_id).await? else {
+        let Some(target) = self.get_bot(target_bot_id).await? else {
             return Ok(None);
         };
 
@@ -85,14 +85,14 @@ impl Storage for MemoryStore {
             .controllers
             .unwrap_or_default()
             .into_iter()
-            .map(|c| c.controller_agent_id)
+            .map(|c| c.controller_bot_id)
             .collect();
 
-        if !controllers.contains(controller_agent_id) {
+        if !controllers.contains(controller_bot_id) {
             return Ok(None);
         }
 
-        self.get_agent_pubkey(controller_agent_id, key_id).await
+        self.get_bot_pubkey(controller_bot_id, key_id).await
     }
 
     async fn issue_nonce(&self) -> anyhow::Result<String> {
@@ -120,13 +120,13 @@ impl Storage for MemoryStore {
 mod tests {
     use super::*;
     use crate::Storage;
-    use identity_core::{AgentStatus, Controller, PolicyRule, PublicKey, SignerSet};
+    use identity_core::{BotStatus, Controller, PolicyRule, PublicKey, SignerSet};
 
-    fn sample_agent(agent_id: &str, key_id: &str) -> AgentRecord {
-        AgentRecord {
-            agent_id: Some(agent_id.to_string()),
+    fn sample_bot(bot_id: &str, key_id: &str) -> BotRecord {
+        BotRecord {
+            bot_id: Some(bot_id.to_string()),
             version: Some(1),
-            status: AgentStatus::Active,
+            status: BotStatus::Active,
             display_name: Some("sample".to_string()),
             description: None,
             owner: None,
@@ -145,7 +145,7 @@ mod tests {
             endpoints: None,
             capabilities: None,
             controllers: None,
-            parent_agent_id: None,
+            parent_bot_id: None,
             policy: None,
             attestations: None,
             evidence: None,
@@ -159,20 +159,20 @@ mod tests {
     #[tokio::test]
     async fn create_get_update_round_trip() {
         let store = MemoryStore::default();
-        let mut agent = sample_agent("urn:agent:sha256:a", "k1");
-        store.create_agent(&agent).await.expect("create");
+        let mut bot = sample_bot("urn:bot:sha256:a", "k1");
+        store.create_bot(&bot).await.expect("create");
 
         let fetched = store
-            .get_agent("urn:agent:sha256:a")
+            .get_bot("urn:bot:sha256:a")
             .await
             .expect("get")
             .expect("exists");
         assert_eq!(fetched.public_keys[0].key_id, "k1");
 
-        agent.display_name = Some("updated".to_string());
-        store.update_agent(&agent).await.expect("update");
+        bot.display_name = Some("updated".to_string());
+        store.update_bot(&bot).await.expect("update");
         let fetched = store
-            .get_agent("urn:agent:sha256:a")
+            .get_bot("urn:bot:sha256:a")
             .await
             .expect("get after update")
             .expect("exists");
@@ -182,8 +182,8 @@ mod tests {
     #[tokio::test]
     async fn get_policy_and_key_lookup_work() {
         let store = MemoryStore::default();
-        let mut agent = sample_agent("urn:agent:sha256:a", "k1");
-        agent.policy = Some(identity_core::Policy {
+        let mut bot = sample_bot("urn:bot:sha256:a", "k1");
+        bot.policy = Some(identity_core::Policy {
             version: 1,
             updated_at: "2026-02-15T00:00:00Z".to_string(),
             rules: vec![PolicyRule {
@@ -197,17 +197,17 @@ mod tests {
                 members: vec![],
             }],
         });
-        store.create_agent(&agent).await.expect("create");
+        store.create_bot(&bot).await.expect("create");
 
         let policy = store
-            .get_policy("urn:agent:sha256:a")
+            .get_policy("urn:bot:sha256:a")
             .await
             .expect("policy")
             .expect("exists");
         assert_eq!(policy.version, 1);
 
         let key = store
-            .get_agent_pubkey("urn:agent:sha256:a", "k1")
+            .get_bot_pubkey("urn:bot:sha256:a", "k1")
             .await
             .expect("key")
             .expect("exists");
@@ -218,25 +218,25 @@ mod tests {
     async fn controller_lookup_requires_relationship() {
         let store = MemoryStore::default();
 
-        let mut target = sample_agent("urn:agent:sha256:target", "target-key");
+        let mut target = sample_bot("urn:bot:sha256:target", "target-key");
         target.controllers = Some(vec![Controller {
-            controller_agent_id: "urn:agent:sha256:controller".to_string(),
+            controller_bot_id: "urn:bot:sha256:controller".to_string(),
             role: Some("owner".to_string()),
             delegation: None,
         }]);
 
-        let controller = sample_agent("urn:agent:sha256:controller", "controller-key");
+        let controller = sample_bot("urn:bot:sha256:controller", "controller-key");
 
-        store.create_agent(&target).await.expect("target create");
+        store.create_bot(&target).await.expect("target create");
         store
-            .create_agent(&controller)
+            .create_bot(&controller)
             .await
             .expect("controller create");
 
         let found = store
             .get_controller_pubkey(
-                "urn:agent:sha256:target",
-                "urn:agent:sha256:controller",
+                "urn:bot:sha256:target",
+                "urn:bot:sha256:controller",
                 "controller-key",
             )
             .await
@@ -245,8 +245,8 @@ mod tests {
 
         let missing = store
             .get_controller_pubkey(
-                "urn:agent:sha256:target",
-                "urn:agent:sha256:other",
+                "urn:bot:sha256:target",
+                "urn:bot:sha256:other",
                 "controller-key",
             )
             .await
