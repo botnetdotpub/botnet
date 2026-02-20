@@ -1,8 +1,9 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum BotStatus {
     Active,
@@ -10,7 +11,7 @@ pub enum BotStatus {
     Revoked,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 pub struct BotRecord {
     pub bot_id: Option<String>,
     pub version: Option<u64>,
@@ -28,8 +29,12 @@ pub struct BotRecord {
     pub evidence: Option<Vec<Evidence>>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
+    /// Single-signature authorization proof for bot mutations.
+    /// The JWS signs the JCS-canonicalized payload with proof fields removed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proof: Option<Proof>,
+    /// Multi-signature authorization proofs for m-of-n policy operations.
+    /// Each signer must be unique by `(controller_bot_id, key_id)`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proof_set: Option<Vec<ProofItem>>,
 }
@@ -47,14 +52,14 @@ impl BotRecord {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 pub struct Owner {
     pub r#type: String,
     pub id: Option<String>,
     pub contact_uri: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 pub struct PublicKey {
     pub key_id: String,
     pub algorithm: String,
@@ -68,7 +73,7 @@ pub struct PublicKey {
     pub origin: Option<KeyOrigin>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 pub struct KeyOrigin {
     pub r#type: String,
     pub scheme: Option<String>,
@@ -77,27 +82,27 @@ pub struct KeyOrigin {
     pub note: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 pub struct Endpoint {
     pub r#type: String,
     pub url: String,
     pub auth: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 pub struct Controller {
     pub controller_bot_id: String,
     pub role: Option<String>,
     pub delegation: Option<Delegation>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 pub struct Delegation {
     pub allows: Vec<String>,
     pub constraints: Option<BTreeMap<String, Vec<String>>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 pub struct Policy {
     pub version: u64,
     pub updated_at: String,
@@ -105,7 +110,7 @@ pub struct Policy {
     pub signer_sets: Vec<SignerSet>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 pub struct PolicyRule {
     pub operation: String,
     pub r#type: String,
@@ -113,24 +118,24 @@ pub struct PolicyRule {
     pub set_id: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 pub struct SignerSet {
     pub set_id: String,
     pub members: Vec<SignerRef>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 pub struct SignerRef {
     pub r#ref: KeyRef,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema, PartialEq, Eq, Hash)]
 pub struct KeyRef {
     pub key_id: String,
     pub controller_bot_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 pub struct Proof {
     pub algorithm: String,
     pub key_id: String,
@@ -139,7 +144,7 @@ pub struct Proof {
     pub jws: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 pub struct ProofItem {
     pub algorithm: String,
     pub key_ref: KeyRef,
@@ -148,7 +153,7 @@ pub struct ProofItem {
     pub jws: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 pub struct Attestation {
     pub attestation_id: Option<String>,
     pub issuer_bot_id: String,
@@ -159,14 +164,14 @@ pub struct Attestation {
     pub expires_at: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 pub struct SignatureRef {
     pub algorithm: String,
     pub key_id: String,
     pub jws: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
 pub struct Evidence {
     pub r#type: String,
     pub uri: String,

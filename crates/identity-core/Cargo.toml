@@ -14,6 +14,7 @@ serde.workspace = true
 serde_jcs.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+utoipa.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true

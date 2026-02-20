@@ -55,6 +55,7 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["trace", "cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
 url = { version = "2", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 wasm-bindgen = "0.2"

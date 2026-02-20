@@ -8,15 +8,16 @@ use axum::{
 use chrono::{SecondsFormat, Utc};
 use identity_core::{
     bot_id::derive_bot_id, canonical::canonicalize, validation::validate_bot_record, Attestation,
-    BotRecord, BotStatus, KeyRef, Proof, ProofItem, PublicKey,
+    BotRecord, BotStatus, Controller, Delegation, Endpoint, Evidence, KeyRef, Owner, Policy,
+    PolicyRule, Proof, ProofItem, PublicKey, SignatureRef, SignerRef, SignerSet,
 };
 use identity_crypto::{keys::verifying_key_from_jwk, verify_compact_jws};
 use identity_policy::eval::{evaluate_threshold, Operation};
 use identity_storage::{MemoryStore, SqliteStore, Storage};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::{collections::HashSet, net::SocketAddr, sync::Arc};
 use tower_http::trace::TraceLayer;
+use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -43,54 +44,159 @@ impl AppState {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 struct AddKeyRequest {
     public_key: PublicKey,
+    /// Single-signature authorization proof for this mutation.
     proof: Option<Proof>,
+    /// Multi-signature authorization proofs for threshold policy checks.
     proof_set: Option<Vec<ProofItem>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 struct RemoveKeyRequest {
     reason: Option<String>,
+    /// Single-signature authorization proof for this mutation.
     proof: Option<Proof>,
+    /// Multi-signature authorization proofs for threshold policy checks.
     proof_set: Option<Vec<ProofItem>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 struct RotateKeyRequest {
     old_key_id: String,
     new_key: PublicKey,
+    /// Single-signature authorization proof for this mutation.
     proof: Option<Proof>,
+    /// Multi-signature authorization proofs for threshold policy checks.
     proof_set: Option<Vec<ProofItem>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 struct RevokeBotRequest {
     reason: Option<String>,
+    /// Single-signature authorization proof for this mutation.
     proof: Option<Proof>,
+    /// Multi-signature authorization proofs for threshold policy checks.
     proof_set: Option<Vec<ProofItem>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 struct PublishAttestationRequest {
     subject_bot_id: String,
     attestation: Attestation,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 struct SearchQuery {
+    #[param(example = "alpha")]
     q: Option<String>,
     status: Option<BotStatus>,
+    #[param(example = "calendar.read")]
     capability: Option<String>,
+    #[param(minimum = 1, maximum = 200, example = 50)]
     limit: Option<usize>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 struct SearchResponse {
     count: usize,
     results: Vec<BotRecord>,
 }
+
+#[derive(Debug, Serialize, ToSchema)]
+struct RootResponse {
+    service: String,
+    status: String,
+    docs: String,
+    openapi: String,
+    swagger: String,
+    health: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct HealthResponse {
+    status: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct NonceResponse {
+    nonce: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct ErrorResponse {
+    error: String,
+}
+
+#[derive(OpenApi)]
+#[openapi(
+    info(
+        title = "AI Bot Identity Registry API",
+        description = "Authentication model: this API uses signed request payloads (not bearer tokens).\n\n\
+        For mutation endpoints, clients must include exactly one authorization mode:\n\
+        - `proof`: single signer JWS\n\
+        - `proof_set`: multi-signer JWS set for m-of-n policy\n\n\
+        The server verifies signatures over the JCS-canonicalized request payload with proof fields removed, \
+        resolves signer keys (including delegated controllers), and enforces policy thresholds.\n\n\
+        Auth-required mutation endpoints:\n\
+        - POST /v1/bots\n\
+        - PATCH /v1/bots/{bot_id}\n\
+        - POST /v1/bots/{bot_id}/keys\n\
+        - DELETE /v1/bots/{bot_id}/keys/{key_id}\n\
+        - POST /v1/bots/{bot_id}/rotate\n\
+        - POST /v1/bots/{bot_id}/revoke\n\
+        - POST /v1/attestations (attestation.signature must verify against issuer key)"
+    ),
+    paths(
+        root,
+        health,
+        create_bot,
+        get_bot,
+        update_bot,
+        add_key,
+        remove_key,
+        rotate_key,
+        revoke_bot,
+        publish_attestation,
+        search,
+        get_nonce
+    ),
+    components(schemas(
+        BotRecord,
+        BotStatus,
+        Owner,
+        PublicKey,
+        Endpoint,
+        Controller,
+        Delegation,
+        Policy,
+        PolicyRule,
+        SignerSet,
+        SignerRef,
+        KeyRef,
+        Proof,
+        ProofItem,
+        Attestation,
+        SignatureRef,
+        Evidence,
+        AddKeyRequest,
+        RemoveKeyRequest,
+        RotateKeyRequest,
+        RevokeBotRequest,
+        PublishAttestationRequest,
+        SearchResponse,
+        RootResponse,
+        HealthResponse,
+        NonceResponse,
+        ErrorResponse
+    )),
+    tags(
+        (name = "bot-registry", description = "AI Bot Identity Registry endpoints. Mutation routes require proof-based signature auth.")
+    )
+)]
+struct ApiDoc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -152,6 +258,8 @@ fn app_router(state: AppState) -> Router {
     Router::new()
         .route("/", get(root))
         .route("/docs", get(docs))
+        .route("/openapi.json", get(openapi_json))
+        .route("/swagger", get(swagger))
         .route("/health", get(health))
         .route("/v1/bots", post(create_bot))
         .route("/v1/bots/{bot_id}", get(get_bot).patch(update_bot))
@@ -166,13 +274,24 @@ fn app_router(state: AppState) -> Router {
         .with_state(state)
 }
 
+#[utoipa::path(
+    get,
+    path = "/",
+    summary = "Service metadata (public)",
+    responses(
+        (status = 200, description = "Service metadata and docs links.", body = RootResponse)
+    ),
+    tag = "bot-registry"
+)]
 async fn root() -> impl IntoResponse {
-    Json(json!({
-        "service": "ai-bot-identity-registry",
-        "status": "ok",
-        "docs": "/docs",
-        "health": "/health"
-    }))
+    Json(RootResponse {
+        service: "ai-bot-identity-registry".to_string(),
+        status: "ok".to_string(),
+        docs: "/docs".to_string(),
+        openapi: "/openapi.json".to_string(),
+        swagger: "/swagger".to_string(),
+        health: "/health".to_string(),
+    })
 }
 
 async fn docs() -> impl IntoResponse {
@@ -196,7 +315,8 @@ async fn docs() -> impl IntoResponse {
   <body>
     <h1>AI Bot Registry API</h1>
     <p class="muted">Starter API surface for bot identity records, keys, and policy-managed operations.</p>
-    <p>Health check: <code>/health</code></p>
+    <p>Health check: <code>/health</code> | OpenAPI JSON: <code>/openapi.json</code> | Swagger UI: <code>/swagger</code></p>
+    <p><strong>Auth model:</strong> mutation routes require signed payloads via <code>proof</code> or <code>proof_set</code> (m-of-n policy).</p>
     <table>
       <thead><tr><th>Method</th><th>Path</th><th>Operation</th><th>Status</th></tr></thead>
       <tbody>
@@ -219,14 +339,70 @@ async fn docs() -> impl IntoResponse {
     )
 }
 
-async fn health() -> impl IntoResponse {
-    Json(json!({"status": "ok"}))
+async fn openapi_json() -> impl IntoResponse {
+    Json(ApiDoc::openapi())
 }
 
+async fn swagger() -> impl IntoResponse {
+    Html(
+        r#"<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Bot Registry Swagger</title>
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script>
+      window.ui = SwaggerUIBundle({
+        url: '/openapi.json',
+        dom_id: '#swagger-ui'
+      });
+    </script>
+  </body>
+</html>
+"#,
+    )
+}
+
+#[utoipa::path(
+    get,
+    path = "/health",
+    summary = "Health check (public)",
+    responses(
+        (status = 200, description = "Liveness endpoint.", body = HealthResponse)
+    ),
+    tag = "bot-registry"
+)]
+async fn health() -> impl IntoResponse {
+    Json(HealthResponse {
+        status: "ok".to_string(),
+    })
+}
+
+#[utoipa::path(
+    post,
+    path = "/v1/bots",
+    summary = "Create bot (auth required)",
+    request_body = BotRecord,
+    responses(
+        (status = 201, description = "Bot created.", body = BotRecord),
+        (status = 400, description = "Invalid payload, signature, or policy inputs.", body = ErrorResponse),
+        (status = 409, description = "Bot already exists.", body = ErrorResponse),
+        (status = 500, description = "Server error.", body = ErrorResponse)
+    ),
+    tag = "bot-registry",
+    description = "Create a new bot identity record. Auth is proof-based: provide either `proof` (single signature) \
+                   or `proof_set` (multi-signature), but not both. Signatures are verified over the JCS-canonicalized payload \
+                   with proof fields removed."
+)]
 async fn create_bot(
     State(state): State<AppState>,
     Json(mut incoming): Json<BotRecord>,
-) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     validate_bot_record(&incoming).map_err(invalid)?;
 
     verify_record_signatures(&incoming, &incoming, state.store.as_ref())
@@ -258,7 +434,9 @@ async fn create_bot(
     {
         return Err((
             StatusCode::CONFLICT,
-            Json(json!({"error": "bot already exists"})),
+            Json(ErrorResponse {
+                error: "bot already exists".to_string(),
+            }),
         ));
     }
     state.store.create_bot(&incoming).await.map_err(internal)?;
@@ -266,27 +444,72 @@ async fn create_bot(
     Ok((StatusCode::CREATED, Json(incoming)))
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/bots/{bot_id}",
+    summary = "Get bot (public)",
+    params(
+        ("bot_id" = String, Path, description = "Bot identifier")
+    ),
+    responses(
+        (status = 200, description = "Bot record.", body = BotRecord),
+        (status = 404, description = "Bot not found.", body = ErrorResponse),
+        (status = 500, description = "Server error.", body = ErrorResponse)
+    ),
+    tag = "bot-registry"
+)]
 async fn get_bot(
     State(state): State<AppState>,
     Path(bot_id): Path<String>,
-) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let Some(bot) = state.store.get_bot(&bot_id).await.map_err(internal)? else {
-        return Err((StatusCode::NOT_FOUND, Json(json!({"error": "not found"}))));
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "not found".to_string(),
+            }),
+        ));
     };
     Ok((StatusCode::OK, Json(bot)))
 }
 
+#[utoipa::path(
+    patch,
+    path = "/v1/bots/{bot_id}",
+    summary = "Update bot (auth required)",
+    params(
+        ("bot_id" = String, Path, description = "Bot identifier")
+    ),
+    request_body = BotRecord,
+    responses(
+        (status = 200, description = "Updated bot record.", body = BotRecord),
+        (status = 400, description = "Invalid payload/signature or policy threshold not met.", body = ErrorResponse),
+        (status = 404, description = "Bot not found.", body = ErrorResponse),
+        (status = 500, description = "Server error.", body = ErrorResponse)
+    ),
+    tag = "bot-registry",
+    description = "Update mutable fields on a bot record. Requires either `proof` or `proof_set`. \
+                   The server verifies signatures from `proof` or `proof_set`, \
+                   resolves controller keys when used, and enforces the bot's operation policy (including m-of-n threshold rules)."
+)]
 async fn update_bot(
     State(state): State<AppState>,
     Path(bot_id): Path<String>,
     Json(mut incoming): Json<BotRecord>,
-) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let current = state
         .store
         .get_bot(&bot_id)
         .await
         .map_err(internal)?
-        .ok_or_else(|| (StatusCode::NOT_FOUND, Json(json!({"error": "not found"}))))?;
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: "not found".to_string(),
+                }),
+            )
+        })?;
 
     // keep identity and immutable metadata server-managed
     incoming.bot_id = Some(bot_id.clone());
@@ -308,17 +531,42 @@ async fn update_bot(
     Ok((StatusCode::OK, Json(incoming)))
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/bots/{bot_id}/keys",
+    summary = "Add key (auth required)",
+    params(
+        ("bot_id" = String, Path, description = "Bot identifier")
+    ),
+    request_body = AddKeyRequest,
+    responses(
+        (status = 200, description = "Updated bot record with new key.", body = BotRecord),
+        (status = 400, description = "Invalid request/signature/policy.", body = ErrorResponse),
+        (status = 404, description = "Bot not found.", body = ErrorResponse),
+        (status = 409, description = "Key ID or key material already exists.", body = ErrorResponse),
+        (status = 500, description = "Server error.", body = ErrorResponse)
+    ),
+    tag = "bot-registry",
+    description = "Add a new key to a bot. Requires either `proof` or `proof_set`; signatures are verified against the updated canonical payload and policy."
+)]
 async fn add_key(
     State(state): State<AppState>,
     Path(bot_id): Path<String>,
     Json(request): Json<AddKeyRequest>,
-) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let current = state
         .store
         .get_bot(&bot_id)
         .await
         .map_err(internal)?
-        .ok_or_else(|| (StatusCode::NOT_FOUND, Json(json!({"error": "not found"}))))?;
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: "not found".to_string(),
+                }),
+            )
+        })?;
 
     if current.status == BotStatus::Revoked {
         return Err(invalid(anyhow::anyhow!("cannot add key to a revoked bot")));
@@ -331,7 +579,9 @@ async fn add_key(
     {
         return Err((
             StatusCode::CONFLICT,
-            Json(json!({"error": "key_id already exists"})),
+            Json(ErrorResponse {
+                error: "key_id already exists".to_string(),
+            }),
         ));
     }
     if current
@@ -341,7 +591,9 @@ async fn add_key(
     {
         return Err((
             StatusCode::CONFLICT,
-            Json(json!({"error": "public key already exists"})),
+            Json(ErrorResponse {
+                error: "public key already exists".to_string(),
+            }),
         ));
     }
 
@@ -374,17 +626,42 @@ async fn add_key(
     Ok((StatusCode::OK, Json(updated)))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/v1/bots/{bot_id}/keys/{key_id}",
+    summary = "Revoke key (auth required)",
+    params(
+        ("bot_id" = String, Path, description = "Bot identifier"),
+        ("key_id" = String, Path, description = "Signing key identifier")
+    ),
+    request_body = RemoveKeyRequest,
+    responses(
+        (status = 200, description = "Updated bot record with key revoked.", body = BotRecord),
+        (status = 400, description = "Invalid request/signature/policy.", body = ErrorResponse),
+        (status = 404, description = "Bot or key not found.", body = ErrorResponse),
+        (status = 500, description = "Server error.", body = ErrorResponse)
+    ),
+    tag = "bot-registry",
+    description = "Revoke a key for a bot. Requires either `proof` or `proof_set`; the signer set must satisfy the policy for `revoke_key`."
+)]
 async fn remove_key(
     State(state): State<AppState>,
     Path((bot_id, key_id)): Path<(String, String)>,
     Json(request): Json<RemoveKeyRequest>,
-) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let current = state
         .store
         .get_bot(&bot_id)
         .await
         .map_err(internal)?
-        .ok_or_else(|| (StatusCode::NOT_FOUND, Json(json!({"error": "not found"}))))?;
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: "not found".to_string(),
+                }),
+            )
+        })?;
 
     if current.status == BotStatus::Revoked {
         return Err(invalid(anyhow::anyhow!("bot is already revoked")));
@@ -401,7 +678,9 @@ async fn remove_key(
         .ok_or_else(|| {
             (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": "key not found"})),
+                Json(ErrorResponse {
+                    error: "key not found".to_string(),
+                }),
             )
         })?;
     if updated.public_keys[idx].revoked_at.is_some() {
@@ -443,17 +722,42 @@ async fn remove_key(
     Ok((StatusCode::OK, Json(updated)))
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/bots/{bot_id}/rotate",
+    summary = "Rotate key (auth required)",
+    params(
+        ("bot_id" = String, Path, description = "Bot identifier")
+    ),
+    request_body = RotateKeyRequest,
+    responses(
+        (status = 200, description = "Updated bot record with rotated key.", body = BotRecord),
+        (status = 400, description = "Invalid request/signature/policy.", body = ErrorResponse),
+        (status = 404, description = "Bot or old key not found.", body = ErrorResponse),
+        (status = 409, description = "New key conflicts with an existing key.", body = ErrorResponse),
+        (status = 500, description = "Server error.", body = ErrorResponse)
+    ),
+    tag = "bot-registry",
+    description = "Rotate a bot signing key in one operation (revoke old + add new). Requires either `proof` or `proof_set` and policy approval."
+)]
 async fn rotate_key(
     State(state): State<AppState>,
     Path(bot_id): Path<String>,
     Json(request): Json<RotateKeyRequest>,
-) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let current = state
         .store
         .get_bot(&bot_id)
         .await
         .map_err(internal)?
-        .ok_or_else(|| (StatusCode::NOT_FOUND, Json(json!({"error": "not found"}))))?;
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: "not found".to_string(),
+                }),
+            )
+        })?;
 
     if current.status == BotStatus::Revoked {
         return Err(invalid(anyhow::anyhow!(
@@ -468,7 +772,9 @@ async fn rotate_key(
     {
         return Err((
             StatusCode::CONFLICT,
-            Json(json!({"error": "new key_id already exists"})),
+            Json(ErrorResponse {
+                error: "new key_id already exists".to_string(),
+            }),
         ));
     }
     if current
@@ -478,7 +784,9 @@ async fn rotate_key(
     {
         return Err((
             StatusCode::CONFLICT,
-            Json(json!({"error": "new public key already exists"})),
+            Json(ErrorResponse {
+                error: "new public key already exists".to_string(),
+            }),
         ));
     }
 
@@ -493,7 +801,9 @@ async fn rotate_key(
         .ok_or_else(|| {
             (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": "old key not found"})),
+                Json(ErrorResponse {
+                    error: "old key not found".to_string(),
+                }),
             )
         })?;
     if updated.public_keys[old_idx].revoked_at.is_some() {
@@ -542,17 +852,41 @@ async fn rotate_key(
     Ok((StatusCode::OK, Json(updated)))
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/bots/{bot_id}/revoke",
+    summary = "Revoke bot (auth required)",
+    params(
+        ("bot_id" = String, Path, description = "Bot identifier")
+    ),
+    request_body = RevokeBotRequest,
+    responses(
+        (status = 200, description = "Bot revoked.", body = BotRecord),
+        (status = 400, description = "Invalid request/signature/policy.", body = ErrorResponse),
+        (status = 404, description = "Bot not found.", body = ErrorResponse),
+        (status = 500, description = "Server error.", body = ErrorResponse)
+    ),
+    tag = "bot-registry",
+    description = "Revoke an entire bot identity. Requires either `proof` or `proof_set`; signatures must satisfy `revoke_bot` policy."
+)]
 async fn revoke_bot(
     State(state): State<AppState>,
     Path(bot_id): Path<String>,
     Json(request): Json<RevokeBotRequest>,
-) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let current = state
         .store
         .get_bot(&bot_id)
         .await
         .map_err(internal)?
-        .ok_or_else(|| (StatusCode::NOT_FOUND, Json(json!({"error": "not found"}))))?;
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: "not found".to_string(),
+                }),
+            )
+        })?;
 
     let mut updated = current.clone();
     updated.proof = request.proof;
@@ -590,10 +924,24 @@ async fn revoke_bot(
     Ok((StatusCode::OK, Json(updated)))
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/attestations",
+    summary = "Publish attestation (signature required)",
+    request_body = PublishAttestationRequest,
+    responses(
+        (status = 201, description = "Attestation published.", body = Attestation),
+        (status = 400, description = "Invalid attestation signature or payload.", body = ErrorResponse),
+        (status = 404, description = "Subject or issuer bot not found.", body = ErrorResponse),
+        (status = 500, description = "Server error.", body = ErrorResponse)
+    ),
+    tag = "bot-registry",
+    description = "Attach an attestation to a subject bot. The attestation itself must include a valid issuer signature in `attestation.signature`."
+)]
 async fn publish_attestation(
     State(state): State<AppState>,
     Json(request): Json<PublishAttestationRequest>,
-) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let subject = state
         .store
         .get_bot(&request.subject_bot_id)
@@ -602,7 +950,9 @@ async fn publish_attestation(
         .ok_or_else(|| {
             (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": "subject bot not found"})),
+                Json(ErrorResponse {
+                    error: "subject bot not found".to_string(),
+                }),
             )
         })?;
     let issuer = state
@@ -613,7 +963,9 @@ async fn publish_attestation(
         .ok_or_else(|| {
             (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": "issuer bot not found"})),
+                Json(ErrorResponse {
+                    error: "issuer bot not found".to_string(),
+                }),
             )
         })?;
 
@@ -655,10 +1007,21 @@ async fn publish_attestation(
     Ok((StatusCode::CREATED, Json(attestation)))
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/search",
+    summary = "Search bots (public)",
+    params(SearchQuery),
+    responses(
+        (status = 200, description = "Search results.", body = SearchResponse),
+        (status = 500, description = "Server error.", body = ErrorResponse)
+    ),
+    tag = "bot-registry"
+)]
 async fn search(
     State(state): State<AppState>,
     Query(query): Query<SearchQuery>,
-) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let mut results = state.store.list_bots().await.map_err(internal)?;
 
     if let Some(status) = query.status {
@@ -703,11 +1066,21 @@ async fn search(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/nonce",
+    summary = "Issue nonce (public)",
+    responses(
+        (status = 200, description = "Fresh nonce for anti-replay usage.", body = NonceResponse),
+        (status = 500, description = "Server error.", body = ErrorResponse)
+    ),
+    tag = "bot-registry"
+)]
 async fn get_nonce(
     State(state): State<AppState>,
-) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let nonce = state.store.issue_nonce().await.map_err(internal)?;
-    Ok((StatusCode::OK, Json(json!({ "nonce": nonce }))))
+    Ok((StatusCode::OK, Json(NonceResponse { nonce })))
 }
 
 #[derive(Serialize)]
@@ -726,6 +1099,8 @@ async fn verify_record_signatures(
     signer_source: &BotRecord,
     store: &dyn Storage,
 ) -> anyhow::Result<Vec<(Option<String>, String)>> {
+    // Auth model: verify detached JWS signatures against the JCS-canonicalized payload
+    // with proof fields removed, then return unique signer identities for policy checks.
     let proofs = unified_proofs(incoming)?;
     let canon = canonicalize(&incoming.payload_for_signing())?;
 
@@ -764,6 +1139,8 @@ async fn resolve_signing_key(
     key_ref: &KeyRef,
 ) -> anyhow::Result<PublicKey> {
     if let Some(controller_bot_id) = &key_ref.controller_bot_id {
+        // Controller signatures are only valid when the controller is explicitly delegated
+        // on the target bot and the referenced controller key is currently active.
         let allowed = signer_source
             .controllers
             .as_ref()
@@ -853,17 +1230,21 @@ fn unify_proofs(record: &BotRecord) -> Option<Vec<ProofItem>> {
     })
 }
 
-fn invalid(err: anyhow::Error) -> (StatusCode, Json<serde_json::Value>) {
+fn invalid(err: anyhow::Error) -> (StatusCode, Json<ErrorResponse>) {
     (
         StatusCode::BAD_REQUEST,
-        Json(json!({"error": err.to_string()})),
+        Json(ErrorResponse {
+            error: err.to_string(),
+        }),
     )
 }
 
-fn internal(err: anyhow::Error) -> (StatusCode, Json<serde_json::Value>) {
+fn internal(err: anyhow::Error) -> (StatusCode, Json<ErrorResponse>) {
     (
         StatusCode::INTERNAL_SERVER_ERROR,
-        Json(json!({"error": err.to_string()})),
+        Json(ErrorResponse {
+            error: err.to_string(),
+        }),
     )
 }
 
@@ -1019,6 +1400,45 @@ mod tests {
         let body = String::from_utf8(bytes.to_vec()).expect("utf8");
         assert!(body.contains("AI Bot Registry API"));
         assert!(body.contains("/v1/bots"));
+    }
+
+    #[tokio::test]
+    async fn openapi_json_exposes_paths() {
+        let app = app_router(AppState::default());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/openapi.json")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("request");
+        assert_eq!(response.status(), StatusCode::OK);
+        let json = body_json(response).await;
+        assert_eq!(json["openapi"], "3.1.0");
+        assert!(json["paths"]["/v1/bots"].is_object());
+    }
+
+    #[tokio::test]
+    async fn swagger_page_loads() {
+        let app = app_router(AppState::default());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/swagger")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("request");
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let body = String::from_utf8(bytes.to_vec()).expect("utf8");
+        assert!(body.contains("swagger-ui"));
+        assert!(body.contains("/openapi.json"));
     }
 
     #[tokio::test]
