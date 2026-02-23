@@ -1066,6 +1066,7 @@ dependencies = [
  "hex",
  "identity-core",
  "identity-sdk",
+ "serde",
  "serde_json",
  "tokio",
 ]

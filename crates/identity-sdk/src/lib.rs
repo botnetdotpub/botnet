@@ -1,8 +1,11 @@
 use anyhow::Context;
 use chrono::{SecondsFormat, Utc};
 use ed25519_dalek::SigningKey;
-use identity_core::{canonical::canonicalize, BotRecord, KeyRef, Proof, ProofItem};
+use identity_core::{
+    canonical::canonicalize, Attestation, BotRecord, BotStatus, KeyRef, Proof, ProofItem, PublicKey,
+};
 use identity_crypto::sign_compact_jws;
+use serde::{Deserialize, Serialize};
 
 pub trait Signer {
     fn key_id(&self) -> &str;
@@ -62,6 +65,63 @@ impl Signer for LocalEd25519Signer {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchResponse {
+    pub count: usize,
+    pub results: Vec<BotRecord>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct NonceResponse {
+    nonce: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct AddKeyRequest {
+    public_key: PublicKey,
+    proof: Option<Proof>,
+    proof_set: Option<Vec<ProofItem>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RemoveKeyRequest {
+    reason: Option<String>,
+    proof: Option<Proof>,
+    proof_set: Option<Vec<ProofItem>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RotateKeyRequest {
+    old_key_id: String,
+    new_key: PublicKey,
+    proof: Option<Proof>,
+    proof_set: Option<Vec<ProofItem>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RevokeBotRequest {
+    reason: Option<String>,
+    proof: Option<Proof>,
+    proof_set: Option<Vec<ProofItem>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct PublishAttestationRequest {
+    subject_bot_id: String,
+    attestation: Attestation,
+}
+
+#[derive(Serialize)]
+struct AttestationPayload<'a> {
+    subject_bot_id: &'a str,
+    issuer_bot_id: &'a str,
+    #[serde(rename = "type")]
+    attestation_type: &'a str,
+    statement: &'a serde_json::Value,
+    issued_at: &'a Option<String>,
+    expires_at: &'a Option<String>,
+}
+
 pub struct Client {
     base_url: String,
     http: reqwest::Client,
@@ -84,7 +144,7 @@ impl Client {
 
         let response = self
             .http
-            .post(format!("{}/bots", self.base_url.trim_end_matches('/')))
+            .post(self.endpoint("bots"))
             .json(&record)
             .send()
             .await
@@ -101,11 +161,7 @@ impl Client {
     pub async fn get_bot(&self, bot_id: &str) -> anyhow::Result<BotRecord> {
         let response = self
             .http
-            .get(format!(
-                "{}/bots/{}",
-                self.base_url.trim_end_matches('/'),
-                urlencoding::encode(bot_id)
-            ))
+            .get(self.endpoint(&format!("bots/{}", urlencoding::encode(bot_id))))
             .send()
             .await
             .context("GET /bots/:id failed")?
@@ -128,11 +184,7 @@ impl Client {
 
         let response = self
             .http
-            .patch(format!(
-                "{}/bots/{}",
-                self.base_url.trim_end_matches('/'),
-                urlencoding::encode(bot_id)
-            ))
+            .patch(self.endpoint(&format!("bots/{}", urlencoding::encode(bot_id))))
             .json(&record)
             .send()
             .await
@@ -145,24 +197,329 @@ impl Client {
             .await
             .context("decode update response")
     }
+
+    pub async fn add_key(
+        &self,
+        bot_id: &str,
+        mut public_key: PublicKey,
+        signer: &dyn Signer,
+    ) -> anyhow::Result<BotRecord> {
+        let current = self.get_bot(bot_id).await?;
+        let mut candidate = current.clone();
+
+        if public_key.primary.unwrap_or(false) {
+            for key in &mut candidate.public_keys {
+                key.primary = Some(false);
+            }
+        } else if public_key.primary.is_none() {
+            public_key.primary = Some(false);
+        }
+        candidate.public_keys.push(public_key.clone());
+
+        let proof = sign_record_with_created(&candidate, signer, now_timestamp())?;
+        let request = AddKeyRequest {
+            public_key,
+            proof: Some(proof),
+            proof_set: None,
+        };
+
+        let response = self
+            .http
+            .post(self.endpoint(&format!("bots/{}/keys", urlencoding::encode(bot_id))))
+            .json(&request)
+            .send()
+            .await
+            .context("POST /bots/:id/keys failed")?
+            .error_for_status()
+            .context("POST /bots/:id/keys returned error status")?;
+
+        response
+            .json::<BotRecord>()
+            .await
+            .context("decode add key response")
+    }
+
+    pub async fn remove_key(
+        &self,
+        bot_id: &str,
+        key_id: &str,
+        reason: Option<String>,
+        signer: &dyn Signer,
+    ) -> anyhow::Result<BotRecord> {
+        let current = self.get_bot(bot_id).await?;
+        let mut candidate = current.clone();
+        let created = now_timestamp();
+
+        let idx = candidate
+            .public_keys
+            .iter()
+            .position(|k| k.key_id == key_id)
+            .ok_or_else(|| anyhow::anyhow!("key not found: {}", key_id))?;
+
+        if candidate.public_keys[idx].revoked_at.is_some() {
+            anyhow::bail!("key already revoked: {}", key_id);
+        }
+
+        let was_primary = candidate.public_keys[idx].primary.unwrap_or(false);
+        candidate.public_keys[idx].revoked_at = Some(created.clone());
+        candidate.public_keys[idx].revocation_reason = reason.clone().or(Some("revoked".into()));
+        candidate.public_keys[idx].primary = Some(false);
+
+        if was_primary {
+            let replacement = candidate
+                .public_keys
+                .iter_mut()
+                .find(|k| k.key_id != key_id && k.revoked_at.is_none())
+                .ok_or_else(|| anyhow::anyhow!("cannot revoke the only active key"))?;
+            replacement.primary = Some(true);
+        }
+
+        let proof = sign_record_with_created(&candidate, signer, created)?;
+        let request = RemoveKeyRequest {
+            reason,
+            proof: Some(proof),
+            proof_set: None,
+        };
+
+        let response = self
+            .http
+            .delete(self.endpoint(&format!(
+                "bots/{}/keys/{}",
+                urlencoding::encode(bot_id),
+                urlencoding::encode(key_id)
+            )))
+            .json(&request)
+            .send()
+            .await
+            .context("DELETE /bots/:id/keys/:key_id failed")?
+            .error_for_status()
+            .context("DELETE /bots/:id/keys/:key_id returned error status")?;
+
+        response
+            .json::<BotRecord>()
+            .await
+            .context("decode remove key response")
+    }
+
+    pub async fn rotate_key(
+        &self,
+        bot_id: &str,
+        old_key_id: &str,
+        mut new_key: PublicKey,
+        signer: &dyn Signer,
+    ) -> anyhow::Result<BotRecord> {
+        let current = self.get_bot(bot_id).await?;
+        let mut candidate = current.clone();
+        let created = now_timestamp();
+
+        let old_idx = candidate
+            .public_keys
+            .iter()
+            .position(|k| k.key_id == old_key_id)
+            .ok_or_else(|| anyhow::anyhow!("old key not found: {}", old_key_id))?;
+
+        if candidate.public_keys[old_idx].revoked_at.is_some() {
+            anyhow::bail!("old key already revoked: {}", old_key_id);
+        }
+
+        let old_was_primary = candidate.public_keys[old_idx].primary.unwrap_or(false);
+        candidate.public_keys[old_idx].revoked_at = Some(created.clone());
+        candidate.public_keys[old_idx].revocation_reason = Some("rotated".to_string());
+        candidate.public_keys[old_idx].primary = Some(false);
+
+        if old_was_primary {
+            for key in &mut candidate.public_keys {
+                key.primary = Some(false);
+            }
+            new_key.primary = Some(true);
+        } else if new_key.primary.unwrap_or(false) {
+            for key in &mut candidate.public_keys {
+                if key.revoked_at.is_none() {
+                    key.primary = Some(false);
+                }
+            }
+        } else if new_key.primary.is_none() {
+            new_key.primary = Some(false);
+        }
+
+        candidate.public_keys.push(new_key.clone());
+
+        let proof = sign_record_with_created(&candidate, signer, created)?;
+        let request = RotateKeyRequest {
+            old_key_id: old_key_id.to_string(),
+            new_key,
+            proof: Some(proof),
+            proof_set: None,
+        };
+
+        let response = self
+            .http
+            .post(self.endpoint(&format!("bots/{}/rotate", urlencoding::encode(bot_id))))
+            .json(&request)
+            .send()
+            .await
+            .context("POST /bots/:id/rotate failed")?
+            .error_for_status()
+            .context("POST /bots/:id/rotate returned error status")?;
+
+        response
+            .json::<BotRecord>()
+            .await
+            .context("decode rotate key response")
+    }
+
+    pub async fn revoke_bot(
+        &self,
+        bot_id: &str,
+        reason: Option<String>,
+        signer: &dyn Signer,
+    ) -> anyhow::Result<BotRecord> {
+        let current = self.get_bot(bot_id).await?;
+        let mut candidate = current;
+        let created = now_timestamp();
+
+        candidate.status = BotStatus::Revoked;
+        for key in &mut candidate.public_keys {
+            if key.revoked_at.is_none() {
+                key.revoked_at = Some(created.clone());
+            }
+            if key.revocation_reason.is_none() {
+                key.revocation_reason = reason.clone().or(Some("bot revoked".into()));
+            }
+        }
+
+        let proof = sign_record_with_created(&candidate, signer, created)?;
+        let request = RevokeBotRequest {
+            reason,
+            proof: Some(proof),
+            proof_set: None,
+        };
+
+        let response = self
+            .http
+            .post(self.endpoint(&format!("bots/{}/revoke", urlencoding::encode(bot_id))))
+            .json(&request)
+            .send()
+            .await
+            .context("POST /bots/:id/revoke failed")?
+            .error_for_status()
+            .context("POST /bots/:id/revoke returned error status")?;
+
+        response
+            .json::<BotRecord>()
+            .await
+            .context("decode revoke response")
+    }
+
+    pub async fn publish_attestation(
+        &self,
+        subject_bot_id: &str,
+        mut attestation: Attestation,
+        signer: &dyn Signer,
+    ) -> anyhow::Result<Attestation> {
+        let payload = AttestationPayload {
+            subject_bot_id,
+            issuer_bot_id: &attestation.issuer_bot_id,
+            attestation_type: &attestation.r#type,
+            statement: &attestation.statement,
+            issued_at: &attestation.issued_at,
+            expires_at: &attestation.expires_at,
+        };
+        let canon = canonicalize(&payload).context("canonicalize attestation payload")?;
+
+        attestation.signature.algorithm = "Ed25519".to_string();
+        attestation.signature.key_id = signer.key_id().to_string();
+        attestation.signature.jws = signer.sign(&canon)?;
+
+        let request = PublishAttestationRequest {
+            subject_bot_id: subject_bot_id.to_string(),
+            attestation,
+        };
+
+        let response = self
+            .http
+            .post(self.endpoint("attestations"))
+            .json(&request)
+            .send()
+            .await
+            .context("POST /attestations failed")?
+            .error_for_status()
+            .context("POST /attestations returned error status")?;
+
+        response
+            .json::<Attestation>()
+            .await
+            .context("decode attestation response")
+    }
+
+    pub async fn search_bots(
+        &self,
+        q: Option<&str>,
+        status: Option<BotStatus>,
+        capability: Option<&str>,
+        limit: Option<usize>,
+    ) -> anyhow::Result<SearchResponse> {
+        let mut params: Vec<(&str, String)> = Vec::new();
+        if let Some(query) = q {
+            params.push(("q", query.to_string()));
+        }
+        if let Some(status) = status {
+            params.push(("status", status_as_str(status).to_string()));
+        }
+        if let Some(capability) = capability {
+            params.push(("capability", capability.to_string()));
+        }
+        if let Some(limit) = limit {
+            params.push(("limit", limit.to_string()));
+        }
+
+        let response = self
+            .http
+            .get(self.endpoint("search"))
+            .query(&params)
+            .send()
+            .await
+            .context("GET /search failed")?
+            .error_for_status()
+            .context("GET /search returned error status")?;
+
+        response
+            .json::<SearchResponse>()
+            .await
+            .context("decode search response")
+    }
+
+    pub async fn get_nonce(&self) -> anyhow::Result<String> {
+        let response = self
+            .http
+            .get(self.endpoint("nonce"))
+            .send()
+            .await
+            .context("GET /nonce failed")?
+            .error_for_status()
+            .context("GET /nonce returned error status")?;
+
+        let nonce = response
+            .json::<NonceResponse>()
+            .await
+            .context("decode nonce response")?;
+        Ok(nonce.nonce)
+    }
+
+    fn endpoint(&self, path: &str) -> String {
+        format!(
+            "{}/{}",
+            self.base_url.trim_end_matches('/'),
+            path.trim_start_matches('/')
+        )
+    }
 }
 
 pub fn attach_single_proof(record: &mut BotRecord, signer: &dyn Signer) -> anyhow::Result<()> {
-    record.proof = None;
+    let created = now_timestamp();
+    let proof = sign_record_with_created(record, signer, created)?;
     record.proof_set = None;
-
-    let payload = record.payload_for_signing();
-    let canon = canonicalize(&payload).context("canonicalize payload")?;
-    let jws = signer.sign(&canon)?;
-
-    record.proof = Some(Proof {
-        algorithm: "Ed25519".into(),
-        key_id: signer.key_id().to_string(),
-        created: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
-        nonce: None,
-        jws,
-    });
-
+    record.proof = Some(proof);
     Ok(())
 }
 
@@ -186,7 +543,7 @@ pub fn attach_proof_set(record: &mut BotRecord, signers: &[&dyn Signer]) -> anyh
                 key_id: signer.key_id().to_string(),
                 controller_bot_id: signer.controller_bot_id().map(str::to_string),
             },
-            created: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+            created: now_timestamp(),
             nonce: None,
             jws,
         });
@@ -194,6 +551,37 @@ pub fn attach_proof_set(record: &mut BotRecord, signers: &[&dyn Signer]) -> anyh
 
     record.proof_set = Some(set);
     Ok(())
+}
+
+fn sign_record_with_created(
+    record: &BotRecord,
+    signer: &dyn Signer,
+    created: String,
+) -> anyhow::Result<Proof> {
+    // Canonical signing payload excludes server-managed fields and any proof/proof_set fields.
+    let payload = record.payload_for_signing();
+    let canon = canonicalize(&payload).context("canonicalize payload")?;
+    let jws = signer.sign(&canon)?;
+
+    Ok(Proof {
+        algorithm: "Ed25519".into(),
+        key_id: signer.key_id().to_string(),
+        created,
+        nonce: None,
+        jws,
+    })
+}
+
+fn now_timestamp() -> String {
+    Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
+}
+
+fn status_as_str(status: BotStatus) -> &'static str {
+    match status {
+        BotStatus::Active => "active",
+        BotStatus::Deprecated => "deprecated",
+        BotStatus::Revoked => "revoked",
+    }
 }
 
 #[cfg(test)]
@@ -304,5 +692,12 @@ mod tests {
             proof_set[0].key_ref.controller_bot_id.as_deref(),
             Some("urn:bot:sha256:controller")
         );
+    }
+
+    #[test]
+    fn status_as_str_matches_api_values() {
+        assert_eq!(status_as_str(BotStatus::Active), "active");
+        assert_eq!(status_as_str(BotStatus::Deprecated), "deprecated");
+        assert_eq!(status_as_str(BotStatus::Revoked), "revoked");
     }
 }

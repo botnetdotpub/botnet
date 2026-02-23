@@ -15,5 +15,6 @@ clap.workspace = true
 hex.workspace = true
 identity-core = { path = "../identity-core" }
 identity-sdk = { path = "../identity-sdk" }
+serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
