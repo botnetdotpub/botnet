@@ -113,6 +113,8 @@ struct RootResponse {
     openapi: String,
     swagger: String,
     health: String,
+    stats: String,
+    install: String,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -128,6 +130,21 @@ struct NonceResponse {
 #[derive(Debug, Serialize, ToSchema)]
 struct ErrorResponse {
     error: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct RegistryStatsResponse {
+    total_bots: usize,
+    active_bots: usize,
+    deprecated_bots: usize,
+    revoked_bots: usize,
+    total_keys: usize,
+    active_keys: usize,
+    revoked_keys: usize,
+    total_attestations: usize,
+    total_controllers: usize,
+    server_time: String,
+    last_bot_update: Option<String>,
 }
 
 #[derive(OpenApi)]
@@ -150,8 +167,9 @@ struct ErrorResponse {
         - POST /v1/attestations (attestation.signature must verify against issuer key)"
     ),
     paths(
-        root,
+        api_root,
         health,
+        registry_stats,
         create_bot,
         get_bot,
         update_bot,
@@ -190,6 +208,7 @@ struct ErrorResponse {
         RootResponse,
         HealthResponse,
         NonceResponse,
+        RegistryStatsResponse,
         ErrorResponse
     )),
     tags(
@@ -256,11 +275,14 @@ fn parse_bind_addr(bind_addr: Option<&str>, port: Option<&str>) -> anyhow::Resul
 
 fn app_router(state: AppState) -> Router {
     Router::new()
-        .route("/", get(root))
+        .route("/", get(homepage))
+        .route("/install.sh", get(install_script))
         .route("/docs", get(docs))
         .route("/openapi.json", get(openapi_json))
         .route("/swagger", get(swagger))
         .route("/health", get(health))
+        .route("/v1", get(api_root))
+        .route("/v1/stats", get(registry_stats))
         .route("/v1/bots", post(create_bot))
         .route("/v1/bots/{bot_id}", get(get_bot).patch(update_bot))
         .route("/v1/bots/{bot_id}/keys", post(add_key))
@@ -276,14 +298,14 @@ fn app_router(state: AppState) -> Router {
 
 #[utoipa::path(
     get,
-    path = "/",
+    path = "/v1",
     summary = "Service metadata (public)",
     responses(
         (status = 200, description = "Service metadata and docs links.", body = RootResponse)
     ),
     tag = "bot-registry"
 )]
-async fn root() -> impl IntoResponse {
+async fn api_root() -> impl IntoResponse {
     Json(RootResponse {
         service: "ai-bot-identity-registry".to_string(),
         status: "ok".to_string(),
@@ -291,7 +313,205 @@ async fn root() -> impl IntoResponse {
         openapi: "/openapi.json".to_string(),
         swagger: "/swagger".to_string(),
         health: "/health".to_string(),
+        stats: "/v1/stats".to_string(),
+        install: "/install.sh".to_string(),
     })
+}
+
+async fn homepage() -> impl IntoResponse {
+    Html(
+        r#"<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>botnet.pub | Bot Identity Registry</title>
+    <style>
+      :root {
+        --bg: #f7f4ea;
+        --ink: #1f2937;
+        --muted: #4b5563;
+        --card: #fffdf7;
+        --line: #d6d3c8;
+        --accent: #0f766e;
+        --accent-soft: #ccfbf1;
+        --warn: #9a3412;
+        --shadow: 0 10px 30px rgba(31, 41, 55, 0.09);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+        color: var(--ink);
+        background: radial-gradient(1200px 600px at 15% 0%, #e0f2fe 0, transparent 60%), var(--bg);
+      }
+      main {
+        max-width: 1060px;
+        margin: 0 auto;
+        padding: 2rem 1rem 3rem;
+      }
+      .hero {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: linear-gradient(135deg, #f8fafc 0%, #fefce8 100%);
+        padding: 1.5rem;
+        box-shadow: var(--shadow);
+      }
+      h1 {
+        margin: 0 0 0.5rem;
+        font-size: clamp(1.8rem, 3vw, 2.8rem);
+        letter-spacing: 0.02em;
+      }
+      .sub {
+        margin: 0;
+        color: var(--muted);
+        max-width: 68ch;
+      }
+      .status {
+        display: inline-block;
+        margin-top: 1rem;
+        padding: 0.35rem 0.7rem;
+        border-radius: 999px;
+        border: 1px solid #99f6e4;
+        background: var(--accent-soft);
+        color: #134e4a;
+        font-size: 0.9rem;
+      }
+      .grid {
+        margin-top: 1rem;
+        display: grid;
+        gap: 0.8rem;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 0.9rem;
+      }
+      .k {
+        font-size: 0.85rem;
+        color: var(--muted);
+        margin-bottom: 0.35rem;
+      }
+      .v {
+        font-size: 1.35rem;
+        font-weight: 700;
+      }
+      h2 {
+        margin: 1.6rem 0 0.6rem;
+        font-size: 1.15rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--card);
+        padding: 1rem;
+      }
+      pre {
+        margin: 0.6rem 0 0;
+        padding: 0.8rem;
+        overflow-x: auto;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        background: #0f172a;
+        color: #e2e8f0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+        font-size: 0.9rem;
+        line-height: 1.4;
+      }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .note { color: var(--warn); margin-top: 0.7rem; min-height: 1.1rem; }
+      .foot { margin-top: 1.4rem; font-size: 0.92rem; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>botnet.pub registry</h1>
+        <p class="sub">Public bot identity registry with signature-verified mutations, policy thresholds, and live service metrics.</p>
+        <div id="health" class="status">Loading service health...</div>
+        <div class="grid">
+          <article class="card"><div class="k">Bots</div><div id="total_bots" class="v">-</div></article>
+          <article class="card"><div class="k">Active Bots</div><div id="active_bots" class="v">-</div></article>
+          <article class="card"><div class="k">Revoked Bots</div><div id="revoked_bots" class="v">-</div></article>
+          <article class="card"><div class="k">Keys (Active)</div><div id="active_keys" class="v">-</div></article>
+          <article class="card"><div class="k">Keys (Revoked)</div><div id="revoked_keys" class="v">-</div></article>
+          <article class="card"><div class="k">Attestations</div><div id="total_attestations" class="v">-</div></article>
+        </div>
+        <div class="foot">
+          Last bot update: <span id="last_update">-</span> | Server time: <span id="server_time">-</span>
+        </div>
+      </section>
+
+      <h2>Quickstart</h2>
+      <section class="panel">
+        Install the CLI:
+        <pre>curl -fsSL https://botnet.pub/install.sh | sh</pre>
+        Query registry:
+        <pre>botctl --base-url https://botnet.pub/v1 search --limit 5</pre>
+        Health check:
+        <pre>curl -sSf https://botnet.pub/health</pre>
+        <div class="note" id="load_error"></div>
+      </section>
+
+      <h2>API</h2>
+      <section class="panel">
+        OpenAPI JSON: <a href="/openapi.json">/openapi.json</a><br />
+        Swagger UI: <a href="/swagger">/swagger</a><br />
+        Human docs: <a href="/docs">/docs</a>
+      </section>
+    </main>
+    <script>
+      const ids = [
+        "total_bots", "active_bots", "revoked_bots",
+        "active_keys", "revoked_keys", "total_attestations",
+        "server_time", "last_update"
+      ];
+      function set(id, value) { document.getElementById(id).textContent = value; }
+      async function refresh() {
+        try {
+          const [healthRes, statsRes] = await Promise.all([fetch("/health"), fetch("/v1/stats")]);
+          const health = await healthRes.json();
+          const stats = await statsRes.json();
+
+          set("total_bots", stats.total_bots);
+          set("active_bots", stats.active_bots);
+          set("revoked_bots", stats.revoked_bots);
+          set("active_keys", stats.active_keys);
+          set("revoked_keys", stats.revoked_keys);
+          set("total_attestations", stats.total_attestations);
+          set("server_time", stats.server_time || "-");
+          set("last_update", stats.last_bot_update || "none yet");
+
+          const healthEl = document.getElementById("health");
+          healthEl.textContent = health.status === "ok" ? "Service healthy" : "Service degraded";
+          healthEl.style.background = health.status === "ok" ? '#ccfbf1' : '#fee2e2';
+          healthEl.style.borderColor = health.status === "ok" ? '#99f6e4' : '#fecaca';
+          healthEl.style.color = health.status === "ok" ? '#134e4a' : '#7f1d1d';
+          document.getElementById("load_error").textContent = "";
+        } catch (err) {
+          document.getElementById("load_error").textContent =
+            "Could not load live stats right now. API endpoints are still available.";
+        }
+      }
+      refresh();
+      setInterval(refresh, 15000);
+    </script>
+  </body>
+</html>
+"#,
+    )
+}
+
+async fn install_script() -> impl IntoResponse {
+    (
+        [("content-type", "text/x-shellscript; charset=utf-8")],
+        include_str!("../../../install.sh"),
+    )
 }
 
 async fn docs() -> impl IntoResponse {
@@ -315,12 +535,14 @@ async fn docs() -> impl IntoResponse {
   <body>
     <h1>AI Bot Registry API</h1>
     <p class="muted">Starter API surface for bot identity records, keys, and policy-managed operations.</p>
-    <p>Health check: <code>/health</code> | OpenAPI JSON: <code>/openapi.json</code> | Swagger UI: <code>/swagger</code></p>
+    <p>Health check: <code>/health</code> | API root: <code>/v1</code> | OpenAPI JSON: <code>/openapi.json</code> | Swagger UI: <code>/swagger</code></p>
     <p><strong>Auth model:</strong> mutation routes require signed payloads via <code>proof</code> or <code>proof_set</code> (m-of-n policy).</p>
     <table>
       <thead><tr><th>Method</th><th>Path</th><th>Operation</th><th>Status</th></tr></thead>
       <tbody>
         <tr><td>GET</td><td><code>/health</code></td><td>Service health</td><td>Implemented</td></tr>
+        <tr><td>GET</td><td><code>/v1</code></td><td>API metadata</td><td>Implemented</td></tr>
+        <tr><td>GET</td><td><code>/v1/stats</code></td><td>Registry stats</td><td>Implemented</td></tr>
         <tr><td>GET</td><td><code>/v1/nonce</code></td><td>Issue nonce</td><td>Implemented</td></tr>
         <tr><td>POST</td><td><code>/v1/bots</code></td><td>Create bot</td><td>Implemented</td></tr>
         <tr><td>GET</td><td><code>/v1/bots/{bot_id}</code></td><td>Get bot</td><td>Implemented</td></tr>
@@ -381,6 +603,67 @@ async fn health() -> impl IntoResponse {
     Json(HealthResponse {
         status: "ok".to_string(),
     })
+}
+
+#[utoipa::path(
+    get,
+    path = "/v1/stats",
+    summary = "Registry stats (public)",
+    responses(
+        (status = 200, description = "Current registry counts and health-adjacent metrics.", body = RegistryStatsResponse),
+        (status = 500, description = "Server error.", body = ErrorResponse)
+    ),
+    tag = "bot-registry"
+)]
+async fn registry_stats(
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let bots = state.store.list_bots().await.map_err(internal)?;
+
+    let total_bots = bots.len();
+    let active_bots = bots
+        .iter()
+        .filter(|b| matches!(b.status, BotStatus::Active))
+        .count();
+    let deprecated_bots = bots
+        .iter()
+        .filter(|b| matches!(b.status, BotStatus::Deprecated))
+        .count();
+    let revoked_bots = bots
+        .iter()
+        .filter(|b| matches!(b.status, BotStatus::Revoked))
+        .count();
+
+    let total_keys = bots.iter().map(|b| b.public_keys.len()).sum();
+    let active_keys = bots
+        .iter()
+        .flat_map(|b| b.public_keys.iter())
+        .filter(|k| k.revoked_at.is_none())
+        .count();
+    let revoked_keys = total_keys - active_keys;
+    let total_attestations = bots
+        .iter()
+        .map(|b| b.attestations.as_ref().map(|v| v.len()).unwrap_or(0))
+        .sum();
+    let total_controllers = bots
+        .iter()
+        .map(|b| b.controllers.as_ref().map(|v| v.len()).unwrap_or(0))
+        .sum();
+    let last_bot_update = bots.iter().filter_map(|b| b.updated_at.clone()).max();
+
+    Ok(Json(RegistryStatsResponse {
+        total_bots,
+        active_bots,
+        deprecated_bots,
+        revoked_bots,
+        total_keys,
+        active_keys,
+        revoked_keys,
+        total_attestations,
+        total_controllers,
+        server_time: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+        last_bot_update,
+    }))
 }
 
 #[utoipa::path(
@@ -1375,15 +1658,32 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn root_returns_docs_pointer() {
+    async fn homepage_returns_html() {
         let app = app_router(AppState::default());
         let response = app
             .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
             .await
             .expect("request");
         assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let body = String::from_utf8(bytes.to_vec()).expect("utf8");
+        assert!(body.contains("botnet.pub registry"));
+        assert!(body.contains("/v1/stats"));
+    }
+
+    #[tokio::test]
+    async fn api_root_returns_docs_pointer() {
+        let app = app_router(AppState::default());
+        let response = app
+            .oneshot(Request::builder().uri("/v1").body(Body::empty()).unwrap())
+            .await
+            .expect("request");
+        assert_eq!(response.status(), StatusCode::OK);
         let json = body_json(response).await;
         assert_eq!(json["docs"], "/docs");
+        assert_eq!(json["stats"], "/v1/stats");
     }
 
     #[tokio::test]
@@ -1418,6 +1718,7 @@ mod tests {
         let json = body_json(response).await;
         assert_eq!(json["openapi"], "3.1.0");
         assert!(json["paths"]["/v1/bots"].is_object());
+        assert!(json["paths"]["/v1/stats"].is_object());
     }
 
     #[tokio::test]
@@ -1439,6 +1740,27 @@ mod tests {
         let body = String::from_utf8(bytes.to_vec()).expect("utf8");
         assert!(body.contains("swagger-ui"));
         assert!(body.contains("/openapi.json"));
+    }
+
+    #[tokio::test]
+    async fn install_script_endpoint_serves_shell_script() {
+        let app = app_router(AppState::default());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/install.sh")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("request");
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let body = String::from_utf8(bytes.to_vec()).expect("utf8");
+        assert!(body.contains("BOTCTL_VERSION"));
+        assert!(body.contains("botctl"));
     }
 
     #[tokio::test]
@@ -1593,6 +1915,31 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let json = body_json(response).await;
         assert!(json["nonce"].as_str().is_some());
+    }
+
+    #[tokio::test]
+    async fn stats_endpoint_returns_counts() {
+        let app = app_router(AppState::default());
+        let mut rng = OsRng;
+        let signer = SigningKey::generate(&mut rng);
+
+        let _ = create_bot_for_test(&app, &signer, "k1", "stats-bot").await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/stats")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("stats request");
+        assert_eq!(response.status(), StatusCode::OK);
+        let json = body_json(response).await;
+        assert_eq!(json["total_bots"], 1);
+        assert_eq!(json["active_bots"], 1);
+        assert_eq!(json["total_keys"], 1);
+        assert_eq!(json["active_keys"], 1);
     }
 
     #[tokio::test]

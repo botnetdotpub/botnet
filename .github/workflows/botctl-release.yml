@@ -1,0 +1,94 @@
+name: botctl-release
+
+on:
+  push:
+    tags:
+      - "botctl-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build-${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-13
+            target: x86_64-apple-darwin
+          - os: macos-14
+            target: aarch64-apple-darwin
+
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_RELEASE_DEBUG: 0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: botnet-pub-rust
+          add-job-id-key: "false"
+          workspaces: |
+            . -> target
+          cache-on-failure: true
+
+      - name: Build botctl
+        run: cargo build --release --locked -p identity-cli --bin botctl --target ${{ matrix.target }}
+
+      - name: Package archive
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/botctl dist/botctl
+          chmod +x dist/botctl
+          tar -C dist -czf botctl-${{ matrix.target }}.tar.gz botctl
+          shasum -a 256 botctl-${{ matrix.target }}.tar.gz > botctl-${{ matrix.target }}.tar.gz.sha256
+
+      - name: Upload packaged artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: botctl-${{ matrix.target }}
+          path: |
+            botctl-${{ matrix.target }}.tar.gz
+            botctl-${{ matrix.target }}.tar.gz.sha256
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Build consolidated checksums
+        run: |
+          cd release-assets
+          sha256sum botctl-*.tar.gz > checksums.txt
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/botctl-*.tar.gz
+            release-assets/botctl-*.tar.gz.sha256
+            release-assets/checksums.txt
+          generate_release_notes: true
+          body: |
+            Install:
+            curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet.pub/main/install.sh | sh
+
+            Pin a version:
+            BOTCTL_VERSION=${{ github.ref_name }} curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet.pub/main/install.sh | sh

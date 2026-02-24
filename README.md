@@ -7,6 +7,13 @@ Bootstrap workspace for an AI Bot Identity Registry with:
 - WebAssembly SDK (`identity-web`)
 - Shared core/crypto/policy/storage crates
 
+Hosted UI/API entrypoints (when deployed to `botnet.pub`):
+- `/` live homepage with registry stats + quickstart
+- `/v1` API root
+- `/v1/stats` registry counts
+- `/docs`, `/openapi.json`, `/swagger` docs
+- `/install.sh` install helper for `botctl`
+
 ## Quick start
 
 ```bash
@@ -25,6 +32,18 @@ In another terminal:
 cargo run -p identity-cli -- --help
 ```
 
+Install CLI from GitHub Releases (after first `botctl-v*` release is published):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet.pub/main/install.sh | sh
+```
+
+Pin a version:
+
+```bash
+BOTCTL_VERSION=botctl-v0.1.0 curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet.pub/main/install.sh | sh
+```
+
 ## Common commands
 
 ```bash
@@ -33,8 +52,20 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
+## Releasing `botctl`
+
+Create and push a tag to publish CLI binaries to GitHub Releases:
+
+```bash
+git tag botctl-v0.1.0
+git push origin botctl-v0.1.0
+```
+
+Release workflow: `.github/workflows/botctl-release.yml`
+
 CI/deploy note:
 - GitHub Actions uses `rust-cache` so dependency/build artifacts can be reused across runs.
+- A dedicated tag workflow (`.github/workflows/botctl-release.yml`) publishes `botctl` release archives.
 
 ## Storage backends
 
