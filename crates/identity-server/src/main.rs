@@ -320,157 +320,430 @@ async fn api_root() -> impl IntoResponse {
 
 async fn homepage() -> impl IntoResponse {
     Html(
-        r#"<!doctype html>
+        r##"<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>botnet.pub | Bot Identity Registry</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
       :root {
-        --bg: #f7f4ea;
-        --ink: #1f2937;
-        --muted: #4b5563;
-        --card: #fffdf7;
-        --line: #d6d3c8;
-        --accent: #0f766e;
-        --accent-soft: #ccfbf1;
-        --warn: #9a3412;
-        --shadow: 0 10px 30px rgba(31, 41, 55, 0.09);
+        --bg: #06080d;
+        --bg-soft: #0a0d14;
+        --card: #0e131d;
+        --line: #1b2231;
+        --line-2: #2a3347;
+        --text: #e5e7ef;
+        --muted: #99a4b7;
+        --mono: #7a859c;
+        --cyan: #22d3ee;
+        --green: #22c55e;
+        --red: #fb7185;
       }
-      * { box-sizing: border-box; }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
       body {
-        margin: 0;
-        font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
-        color: var(--ink);
-        background: radial-gradient(1200px 600px at 15% 0%, #e0f2fe 0, transparent 60%), var(--bg);
+        min-height: 100vh;
+        color: var(--text);
+        font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+        background:
+          radial-gradient(900px 400px at 8% 0%, rgba(34,211,238,0.08), transparent 58%),
+          radial-gradient(700px 320px at 92% 18%, rgba(99,102,241,0.08), transparent 60%),
+          linear-gradient(180deg, #05070b 0%, #06080d 100%);
       }
       main {
-        max-width: 1060px;
+        max-width: 1180px;
         margin: 0 auto;
-        padding: 2rem 1rem 3rem;
+        padding: 1.25rem 1rem 2.5rem;
       }
-      .hero {
+
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
         border: 1px solid var(--line);
-        border-radius: 16px;
-        background: linear-gradient(135deg, #f8fafc 0%, #fefce8 100%);
+        border-radius: 14px;
+        padding: 0.85rem 1rem;
+        background: rgba(8, 11, 18, 0.62);
+        backdrop-filter: blur(8px);
+      }
+      .brand {
+        color: #f8fafc;
+        font-size: 1.05rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+      }
+      .brand span {
+        color: var(--mono);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 0.9rem;
+        margin-right: 0.45rem;
+      }
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 1.1rem;
+      }
+      .nav-links a {
+        text-decoration: none;
+        font-family: "IBM Plex Mono", monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        font-size: 0.77rem;
+        color: var(--muted);
+      }
+      .nav-links a:hover { color: #f8fafc; }
+      .github-btn {
+        padding: 0.55rem 0.88rem;
+        border: 1px solid var(--line-2);
+        border-radius: 10px;
+      }
+
+      .hero {
+        margin-top: 1rem;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(10, 14, 22, 0.95), rgba(7, 10, 17, 0.95));
+        overflow: hidden;
+      }
+      .hero-inner {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 1.2rem;
         padding: 1.5rem;
-        box-shadow: var(--shadow);
+      }
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.72rem;
+        font-family: "IBM Plex Mono", monospace;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--mono);
+      }
+      .eyebrow::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--green);
+        box-shadow: 0 0 12px rgba(34, 197, 94, 0.65);
       }
       h1 {
-        margin: 0 0 0.5rem;
-        font-size: clamp(1.8rem, 3vw, 2.8rem);
-        letter-spacing: 0.02em;
+        margin-top: 0.85rem;
+        font-size: clamp(2.15rem, 5vw, 4rem);
+        line-height: 1.03;
+        letter-spacing: -0.03em;
+        max-width: 13ch;
       }
-      .sub {
-        margin: 0;
-        color: var(--muted);
-        max-width: 68ch;
+      .lede {
+        margin-top: 1rem;
+        color: #b7c0d1;
+        max-width: 52ch;
+        font-size: 1.06rem;
+        line-height: 1.5;
       }
       .status {
-        display: inline-block;
-        margin-top: 1rem;
-        padding: 0.35rem 0.7rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        margin-top: 1.1rem;
+        padding: 0.42rem 0.72rem;
         border-radius: 999px;
-        border: 1px solid #99f6e4;
-        background: var(--accent-soft);
-        color: #134e4a;
-        font-size: 0.9rem;
+        border: 1px solid #1e3346;
+        background: rgba(34, 211, 238, 0.08);
+        color: #8be9fa;
+        font-size: 0.83rem;
+        font-family: "IBM Plex Mono", monospace;
       }
-      .grid {
-        margin-top: 1rem;
-        display: grid;
-        gap: 0.8rem;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      .hero-actions {
+        margin-top: 1.2rem;
+        display: flex;
+        gap: 0.7rem;
+        flex-wrap: wrap;
       }
-      .card {
-        background: var(--card);
+      .btn {
+        text-decoration: none;
+        border-radius: 11px;
+        border: 1px solid var(--line-2);
+        padding: 0.7rem 0.92rem;
+        font-size: 0.85rem;
+        color: #d6def0;
+      }
+      .btn.primary {
+        border-color: #10485a;
+        background: linear-gradient(180deg, #0a3e50, #0c283a);
+      }
+
+      .terminal {
         border: 1px solid var(--line);
-        border-radius: 12px;
+        border-radius: 14px;
+        background: #0a0f18;
+        overflow: hidden;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+        animation: float 8s ease-in-out infinite;
+      }
+      .terminal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.62rem 0.72rem;
+        border-bottom: 1px solid var(--line);
+        background: rgba(255,255,255,0.02);
+      }
+      .dots {
+        display: flex;
+        gap: 0.38rem;
+      }
+      .dots span {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: block;
+      }
+      .dots span:nth-child(1) { background: #fb7185; }
+      .dots span:nth-child(2) { background: #f59e0b; }
+      .dots span:nth-child(3) { background: #34d399; }
+      .title {
+        color: var(--mono);
+        font-size: 0.7rem;
+        font-family: "IBM Plex Mono", monospace;
+        letter-spacing: 0.13em;
+      }
+      .terminal-body {
         padding: 0.9rem;
       }
-      .k {
-        font-size: 0.85rem;
-        color: var(--muted);
-        margin-bottom: 0.35rem;
+      .row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 0.55rem;
+        padding: 0.47rem 0;
+        border-bottom: 1px dashed #1a2331;
+        font-family: "IBM Plex Mono", monospace;
+        color: #aab4c9;
+        font-size: 0.82rem;
       }
-      .v {
-        font-size: 1.35rem;
-        font-weight: 700;
-      }
-      h2 {
-        margin: 1.6rem 0 0.6rem;
-        font-size: 1.15rem;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
+      .row:last-child { border-bottom: 0; }
+      .row strong { color: #dbe4f6; font-weight: 500; }
+      .good { color: #33d17a; }
+      .warn { color: #f97316; }
+
+      .quick {
+        margin-top: 1rem;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
       }
       .panel {
         border: 1px solid var(--line);
-        border-radius: 12px;
+        border-radius: 14px;
         background: var(--card);
         padding: 1rem;
       }
-      pre {
-        margin: 0.6rem 0 0;
-        padding: 0.8rem;
-        overflow-x: auto;
-        border: 1px solid #cbd5e1;
-        border-radius: 10px;
-        background: #0f172a;
-        color: #e2e8f0;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-        font-size: 0.9rem;
-        line-height: 1.4;
+      .panel h2 {
+        font-family: "IBM Plex Mono", monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-size: 0.73rem;
+        color: var(--mono);
       }
-      a { color: var(--accent); text-decoration: none; }
-      a:hover { text-decoration: underline; }
-      .note { color: var(--warn); margin-top: 0.7rem; min-height: 1.1rem; }
-      .foot { margin-top: 1.4rem; font-size: 0.92rem; color: var(--muted); }
+      .panel p {
+        margin-top: 0.65rem;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+      pre {
+        margin-top: 0.75rem;
+        padding: 0.82rem 0.9rem;
+        border-radius: 11px;
+        border: 1px solid #243247;
+        background: #090d15;
+        color: #f8fafc;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 0.84rem;
+        overflow-x: auto;
+      }
+      .prompt { color: #22c55e; margin-right: 0.42rem; }
+
+      .stats {
+        margin-top: 1rem;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        overflow: hidden;
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+      }
+      .metric {
+        padding: 0.9rem;
+        border-right: 1px solid var(--line);
+        background: linear-gradient(180deg, #0b1018, #090d15);
+      }
+      .metric:last-child { border-right: 0; }
+      .metric .k {
+        color: var(--mono);
+        font-family: "IBM Plex Mono", monospace;
+        text-transform: uppercase;
+        font-size: 0.63rem;
+        letter-spacing: 0.15em;
+      }
+      .metric .v {
+        margin-top: 0.46rem;
+        font-size: clamp(1.1rem, 2vw, 1.55rem);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .metric:nth-child(1) .v { color: #60a5fa; }
+      .metric:nth-child(2) .v { color: #4ade80; }
+      .metric:nth-child(3) .v { color: #fb7185; }
+      .metric:nth-child(4) .v { color: #22d3ee; }
+      .metric:nth-child(5) .v { color: #fda4af; }
+      .metric:nth-child(6) .v { color: #a78bfa; }
+
+      .meta {
+        margin-top: 0.75rem;
+        padding: 0.7rem 0.9rem;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        color: var(--muted);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 0.75rem;
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+      .api-links {
+        margin-top: 0.8rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.62rem;
+      }
+      .api-links a {
+        text-decoration: none;
+        color: #c7d2fe;
+        border: 1px solid var(--line-2);
+        border-radius: 999px;
+        padding: 0.44rem 0.7rem;
+        font-size: 0.77rem;
+        font-family: "IBM Plex Mono", monospace;
+      }
+      .api-links a:hover { border-color: #475569; }
+      .note {
+        margin-top: 0.55rem;
+        min-height: 1.1rem;
+        color: #fb7185;
+        font-size: 0.82rem;
+      }
+
+      @keyframes float {
+        0% { transform: translateY(0px); }
+        50% { transform: translateY(-6px); }
+        100% { transform: translateY(0px); }
+      }
+
+      @media (max-width: 960px) {
+        .hero-inner { grid-template-columns: 1fr; }
+        .quick { grid-template-columns: 1fr; }
+        .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      }
+      @media (max-width: 680px) {
+        .nav-links a:not(.github-btn) { display: none; }
+        .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        h1 { font-size: 2.35rem; }
+      }
     </style>
   </head>
   <body>
     <main>
+      <header class="nav">
+        <div class="brand"><span>$</span>botnet.pub registry</div>
+        <nav class="nav-links">
+          <a href="#quickstart">quickstart</a>
+          <a href="/docs">docs</a>
+          <a href="/swagger">swagger</a>
+          <a class="github-btn" href="https://github.com/botnetdotpub/botnet.pub" target="_blank" rel="noreferrer">github</a>
+        </nav>
+      </header>
+
       <section class="hero">
-        <h1>botnet.pub registry</h1>
-        <p class="sub">Public bot identity registry with signature-verified mutations, policy thresholds, and live service metrics.</p>
-        <div id="health" class="status">Loading service health...</div>
-        <div class="grid">
-          <article class="card"><div class="k">Bots</div><div id="total_bots" class="v">-</div></article>
-          <article class="card"><div class="k">Active Bots</div><div id="active_bots" class="v">-</div></article>
-          <article class="card"><div class="k">Revoked Bots</div><div id="revoked_bots" class="v">-</div></article>
-          <article class="card"><div class="k">Keys (Active)</div><div id="active_keys" class="v">-</div></article>
-          <article class="card"><div class="k">Keys (Revoked)</div><div id="revoked_keys" class="v">-</div></article>
-          <article class="card"><div class="k">Attestations</div><div id="total_attestations" class="v">-</div></article>
-        </div>
-        <div class="foot">
-          Last bot update: <span id="last_update">-</span> | Server time: <span id="server_time">-</span>
+        <div class="hero-inner">
+          <div>
+            <p class="eyebrow">live registry control plane</p>
+            <h1>Verifiable bot identities for autonomous systems.</h1>
+            <p class="lede">Track bots, keys, and attestations with signature-enforced updates and policy thresholds. Minimal API, public docs, production-ready workflow.</p>
+            <div id="health" class="status">Loading service health...</div>
+            <div class="hero-actions">
+              <a class="btn primary" href="#quickstart">Start in 1 command</a>
+              <a class="btn" href="/openapi.json">OpenAPI</a>
+            </div>
+          </div>
+          <aside class="terminal">
+            <div class="terminal-head">
+              <div class="dots"><span></span><span></span><span></span></div>
+              <div class="title">botnet.pub runtime</div>
+            </div>
+            <div class="terminal-body">
+              <div class="row"><span><strong>status</strong></span><span id="term_health" class="good">loading</span></div>
+              <div class="row"><span><strong>bots.active</strong></span><span id="term_active_bots">-</span></div>
+              <div class="row"><span><strong>bots.revoked</strong></span><span id="term_revoked_bots">-</span></div>
+              <div class="row"><span><strong>keys.active</strong></span><span id="term_active_keys">-</span></div>
+              <div class="row"><span><strong>attestations</strong></span><span id="term_attestations">-</span></div>
+              <div class="row"><span><strong>last.update</strong></span><span id="term_last_update" class="warn">-</span></div>
+            </div>
+          </aside>
         </div>
       </section>
 
-      <h2>Quickstart</h2>
-      <section class="panel">
-        Install the CLI:
-        <pre>curl -fsSL https://botnet.pub/install.sh | sh</pre>
-        Query registry:
-        <pre>botctl --base-url https://botnet.pub/v1 search --limit 5</pre>
-        Health check:
-        <pre>curl -sSf https://botnet.pub/health</pre>
-        <div class="note" id="load_error"></div>
+      <section class="stats">
+        <article class="metric"><div class="k">Bots</div><div id="total_bots" class="v">-</div></article>
+        <article class="metric"><div class="k">Active</div><div id="active_bots" class="v">-</div></article>
+        <article class="metric"><div class="k">Revoked</div><div id="revoked_bots" class="v">-</div></article>
+        <article class="metric"><div class="k">Keys Active</div><div id="active_keys" class="v">-</div></article>
+        <article class="metric"><div class="k">Keys Revoked</div><div id="revoked_keys" class="v">-</div></article>
+        <article class="metric"><div class="k">Attestations</div><div id="total_attestations" class="v">-</div></article>
       </section>
 
-      <h2>API</h2>
-      <section class="panel">
-        OpenAPI JSON: <a href="/openapi.json">/openapi.json</a><br />
-        Swagger UI: <a href="/swagger">/swagger</a><br />
-        Human docs: <a href="/docs">/docs</a>
+      <section class="meta">
+        <div>last bot update: <span id="last_update">-</span></div>
+        <div>server time: <span id="server_time">-</span></div>
+      </section>
+
+      <section id="quickstart" class="quick">
+        <article class="panel">
+          <h2>Install CLI</h2>
+          <p>One command install for <code>botctl</code>.</p>
+          <pre><span class="prompt">$</span>curl -fsSL https://botnet.pub/install.sh | sh</pre>
+        </article>
+        <article class="panel">
+          <h2>Query Registry</h2>
+          <p>Hit search immediately after install.</p>
+          <pre><span class="prompt">$</span>botctl --base-url https://botnet.pub/v1 search --limit 5</pre>
+          <div class="api-links">
+            <a href="/v1">/v1</a>
+            <a href="/v1/stats">/v1/stats</a>
+            <a href="/docs">/docs</a>
+            <a href="/swagger">/swagger</a>
+            <a href="/openapi.json">/openapi.json</a>
+          </div>
+          <div class="note" id="load_error"></div>
+        </article>
+      </section>
+
+      <section class="quick">
+        <article class="panel">
+          <h2>Health</h2>
+          <pre><span class="prompt">$</span>curl -sSf https://botnet.pub/health</pre>
+        </article>
+        <article class="panel">
+          <h2>Auth Model</h2>
+          <p>Mutations require signed payloads via <code>proof</code> or <code>proof_set</code> and policy threshold checks.</p>
+        </article>
       </section>
     </main>
     <script>
-      const ids = [
-        "total_bots", "active_bots", "revoked_bots",
-        "active_keys", "revoked_keys", "total_attestations",
-        "server_time", "last_update"
-      ];
       function set(id, value) { document.getElementById(id).textContent = value; }
       async function refresh() {
         try {
@@ -486,16 +759,35 @@ async fn homepage() -> impl IntoResponse {
           set("total_attestations", stats.total_attestations);
           set("server_time", stats.server_time || "-");
           set("last_update", stats.last_bot_update || "none yet");
+          set("term_active_bots", stats.active_bots);
+          set("term_revoked_bots", stats.revoked_bots);
+          set("term_active_keys", stats.active_keys);
+          set("term_attestations", stats.total_attestations);
+          set("term_last_update", stats.last_bot_update || "none yet");
 
           const healthEl = document.getElementById("health");
-          healthEl.textContent = health.status === "ok" ? "Service healthy" : "Service degraded";
-          healthEl.style.background = health.status === "ok" ? '#ccfbf1' : '#fee2e2';
-          healthEl.style.borderColor = health.status === "ok" ? '#99f6e4' : '#fecaca';
-          healthEl.style.color = health.status === "ok" ? '#134e4a' : '#7f1d1d';
+          const termHealth = document.getElementById("term_health");
+          if (health.status === "ok") {
+            healthEl.textContent = "Service healthy";
+            healthEl.style.background = "rgba(34, 211, 238, 0.08)";
+            healthEl.style.borderColor = "#1e3346";
+            healthEl.style.color = "#8be9fa";
+            termHealth.textContent = "healthy";
+            termHealth.className = "good";
+          } else {
+            healthEl.textContent = "Service degraded";
+            healthEl.style.background = "rgba(251, 113, 133, 0.11)";
+            healthEl.style.borderColor = "#4c1d2e";
+            healthEl.style.color = "#fecdd3";
+            termHealth.textContent = "degraded";
+            termHealth.className = "warn";
+          }
           document.getElementById("load_error").textContent = "";
         } catch (err) {
           document.getElementById("load_error").textContent =
             "Could not load live stats right now. API endpoints are still available.";
+          document.getElementById("term_health").textContent = "offline";
+          document.getElementById("term_health").className = "warn";
         }
       }
       refresh();
@@ -503,7 +795,7 @@ async fn homepage() -> impl IntoResponse {
     </script>
   </body>
 </html>
-"#,
+"##,
     )
 }
 
