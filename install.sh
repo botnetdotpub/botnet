@@ -2,8 +2,8 @@
 set -eu
 
 REPO="botnetdotpub/botnet.pub"
-APP="botctl"
-VERSION="${BOTCTL_VERSION:-latest}"
+APP="botnet"
+VERSION="${BOTNET_VERSION:-latest}"
 
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then

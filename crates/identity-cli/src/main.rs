@@ -6,7 +6,7 @@ use serde::de::DeserializeOwned;
 use serde::Deserialize;
 
 #[derive(Parser, Debug)]
-#[command(name = "botctl")]
+#[command(name = "botnet")]
 #[command(about = "AI Bot Registry CLI")]
 struct Cli {
     #[arg(long, default_value = "http://localhost:8080/v1")]
@@ -218,7 +218,7 @@ mod tests {
     #[test]
     fn parses_register_command_with_signing_args() {
         let cli = Cli::parse_from([
-            "botctl",
+            "botnet",
             "--base-url",
             "http://localhost:8080/v1",
             "--key-id",
@@ -240,7 +240,7 @@ mod tests {
     #[test]
     fn parses_rotate_key_command() {
         let cli = Cli::parse_from([
-            "botctl",
+            "botnet",
             "--key-id",
             "k1",
             "--secret-seed-hex",
@@ -262,7 +262,7 @@ mod tests {
     #[test]
     fn parses_search_command_with_status() {
         let cli = Cli::parse_from([
-            "botctl", "search", "--q", "alpha", "--status", "active", "--limit", "10",
+            "botnet", "search", "--q", "alpha", "--status", "active", "--limit", "10",
         ]);
 
         match cli.command {

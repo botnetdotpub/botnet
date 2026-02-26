@@ -1,9 +1,9 @@
-name: botctl-release
+name: botnet-release
 
 on:
   push:
     tags:
-      - "botctl-v*"
+      - "botnet-v*"
 
 permissions:
   contents: write
@@ -42,24 +42,24 @@ jobs:
             . -> target
           cache-on-failure: true
 
-      - name: Build botctl
-        run: cargo build --release --locked -p identity-cli --bin botctl --target ${{ matrix.target }}
+      - name: Build botnet
+        run: cargo build --release --locked -p identity-cli --bin botnet --target ${{ matrix.target }}
 
       - name: Package archive
         run: |
           mkdir -p dist
-          cp target/${{ matrix.target }}/release/botctl dist/botctl
-          chmod +x dist/botctl
-          tar -C dist -czf botctl-${{ matrix.target }}.tar.gz botctl
-          shasum -a 256 botctl-${{ matrix.target }}.tar.gz > botctl-${{ matrix.target }}.tar.gz.sha256
+          cp target/${{ matrix.target }}/release/botnet dist/botnet
+          chmod +x dist/botnet
+          tar -C dist -czf botnet-${{ matrix.target }}.tar.gz botnet
+          shasum -a 256 botnet-${{ matrix.target }}.tar.gz > botnet-${{ matrix.target }}.tar.gz.sha256
 
       - name: Upload packaged artifact
         uses: actions/upload-artifact@v4
         with:
-          name: botctl-${{ matrix.target }}
+          name: botnet-${{ matrix.target }}
           path: |
-            botctl-${{ matrix.target }}.tar.gz
-            botctl-${{ matrix.target }}.tar.gz.sha256
+            botnet-${{ matrix.target }}.tar.gz
+            botnet-${{ matrix.target }}.tar.gz.sha256
           if-no-files-found: error
 
   publish:
@@ -76,14 +76,14 @@ jobs:
       - name: Build consolidated checksums
         run: |
           cd release-assets
-          sha256sum botctl-*.tar.gz > checksums.txt
+          sha256sum botnet-*.tar.gz > checksums.txt
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-assets/botctl-*.tar.gz
-            release-assets/botctl-*.tar.gz.sha256
+            release-assets/botnet-*.tar.gz
+            release-assets/botnet-*.tar.gz.sha256
             release-assets/checksums.txt
           generate_release_notes: true
           body: |
@@ -91,4 +91,4 @@ jobs:
             curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet.pub/main/install.sh | sh
 
             Pin a version:
-            BOTCTL_VERSION=${{ github.ref_name }} curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet.pub/main/install.sh | sh
+            BOTNET_VERSION=${{ github.ref_name }} curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet.pub/main/install.sh | sh

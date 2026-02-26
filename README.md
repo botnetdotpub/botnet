@@ -12,7 +12,7 @@ Hosted UI/API entrypoints (when deployed to `botnet.pub`):
 - `/v1` API root
 - `/v1/stats` registry counts
 - `/docs`, `/openapi.json`, `/swagger` docs
-- `/install.sh` install helper for `botctl`
+- `/install.sh` install helper for `botnet`
 
 ## Quick start
 
@@ -32,7 +32,7 @@ In another terminal:
 cargo run -p identity-cli -- --help
 ```
 
-Install CLI from GitHub Releases (after first `botctl-v*` release is published):
+Install CLI from GitHub Releases (after first `botnet-v*` release is published):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet.pub/main/install.sh | sh
@@ -41,7 +41,7 @@ curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet.pub/main/instal
 Pin a version:
 
 ```bash
-BOTCTL_VERSION=botctl-v0.1.0 curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet.pub/main/install.sh | sh
+BOTNET_VERSION=botnet-v0.1.0 curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet.pub/main/install.sh | sh
 ```
 
 ## Common commands
@@ -52,20 +52,20 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-## Releasing `botctl`
+## Releasing `botnet`
 
 Create and push a tag to publish CLI binaries to GitHub Releases:
 
 ```bash
-git tag botctl-v0.1.0
-git push origin botctl-v0.1.0
+git tag botnet-v0.1.0
+git push origin botnet-v0.1.0
 ```
 
-Release workflow: `.github/workflows/botctl-release.yml`
+Release workflow: `.github/workflows/botnet-release.yml`
 
 CI/deploy note:
 - GitHub Actions uses `rust-cache` so dependency/build artifacts can be reused across runs.
-- A dedicated tag workflow (`.github/workflows/botctl-release.yml`) publishes `botctl` release archives.
+- A dedicated tag workflow (`.github/workflows/botnet-release.yml`) publishes `botnet` release archives.
 
 ## Storage backends
 

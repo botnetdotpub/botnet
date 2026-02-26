@@ -714,13 +714,13 @@ async fn homepage() -> impl IntoResponse {
       <section id="quickstart" class="quick">
         <article class="panel">
           <h2>Install CLI</h2>
-          <p>One command install for <code>botctl</code>.</p>
+          <p>One command install for <code>botnet</code>.</p>
           <pre><span class="prompt">$</span>curl -fsSL https://botnet.pub/install.sh | sh</pre>
         </article>
         <article class="panel">
           <h2>Query Registry</h2>
           <p>Hit search immediately after install.</p>
-          <pre><span class="prompt">$</span>botctl --base-url https://botnet.pub/v1 search --limit 5</pre>
+          <pre><span class="prompt">$</span>botnet --base-url https://botnet.pub/v1 search --limit 5</pre>
           <div class="api-links">
             <a href="/v1">/v1</a>
             <a href="/v1/stats">/v1/stats</a>
@@ -2051,8 +2051,8 @@ mod tests {
             .await
             .expect("body");
         let body = String::from_utf8(bytes.to_vec()).expect("utf8");
-        assert!(body.contains("BOTCTL_VERSION"));
-        assert!(body.contains("botctl"));
+        assert!(body.contains("BOTNET_VERSION"));
+        assert!(body.contains("botnet"));
     }
 
     #[tokio::test]

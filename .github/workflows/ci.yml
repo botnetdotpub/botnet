@@ -12,7 +12,7 @@ on:
       - "migrations/**"
       - ".github/workflows/ci.yml"
       - ".github/workflows/vps-rolling-deploy.yml"
-      - ".github/workflows/botctl-release.yml"
+      - ".github/workflows/botnet-release.yml"
       - "deploy/systemd/**"
       - "deploy/env/**"
       - "scripts/**"

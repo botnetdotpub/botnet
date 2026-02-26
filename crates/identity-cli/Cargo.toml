@@ -6,7 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [[bin]]
-name = "botctl"
+name = "botnet"
 path = "src/main.rs"
 
 [dependencies]
