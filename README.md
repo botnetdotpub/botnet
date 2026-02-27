@@ -11,7 +11,8 @@ Hosted UI/API entrypoints (when deployed to `botnet.pub`):
 - `/` live homepage with registry stats + quickstart
 - `/v1` API root
 - `/v1/stats` registry counts
-- `/docs`, `/openapi.json`, `/swagger` docs
+- `/docs` docs index with `/docs/api` and `/docs/cli`
+- `/openapi.json`, `/swagger` machine-readable + interactive API docs
 - `/install.sh` install helper for `botnet`
 
 ## Quick start

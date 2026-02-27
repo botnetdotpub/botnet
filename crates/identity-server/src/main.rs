@@ -277,7 +277,9 @@ fn app_router(state: AppState) -> Router {
     Router::new()
         .route("/", get(homepage))
         .route("/install.sh", get(install_script))
-        .route("/docs", get(docs))
+        .route("/docs", get(docs_index))
+        .route("/docs/api", get(docs_api))
+        .route("/docs/cli", get(docs_cli))
         .route("/openapi.json", get(openapi_json))
         .route("/swagger", get(swagger))
         .route("/health", get(health))
@@ -806,50 +808,313 @@ async fn install_script() -> impl IntoResponse {
     )
 }
 
-async fn docs() -> impl IntoResponse {
+async fn docs_index() -> impl IntoResponse {
     Html(
-        r#"<!doctype html>
-<html>
+        r##"<!doctype html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AI Bot Registry API Docs</title>
+    <title>botnet.pub docs</title>
     <style>
-      body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem auto; max-width: 920px; padding: 0 1rem; line-height: 1.45; }
-      h1 { margin-bottom: 0.2rem; }
-      code { background: #f3f4f6; padding: 0.1rem 0.35rem; border-radius: 4px; }
-      table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
-      th, td { border: 1px solid #e5e7eb; text-align: left; padding: 0.55rem 0.65rem; vertical-align: top; }
-      th { background: #f9fafb; }
-      .muted { color: #6b7280; }
+      :root {
+        --bg: #070a11;
+        --panel: #0c1220;
+        --line: #1f2a3c;
+        --text: #e5e7ef;
+        --muted: #9aa6bb;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "SF Pro Text", "Inter", system-ui, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(900px 340px at 12% -5%, rgba(34, 211, 238, 0.10), transparent 55%),
+          radial-gradient(700px 300px at 95% 10%, rgba(99, 102, 241, 0.10), transparent 58%),
+          var(--bg);
+      }
+      main { max-width: 980px; margin: 0 auto; padding: 2rem 1rem; }
+      h1 { margin: 0; font-size: clamp(1.9rem, 4vw, 2.8rem); letter-spacing: -0.02em; }
+      p { color: var(--muted); line-height: 1.55; }
+      .top {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 1.1rem;
+        background: rgba(10, 14, 24, 0.85);
+      }
+      .grid {
+        margin-top: 1rem;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 0.9rem;
+      }
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 1rem;
+        background: var(--panel);
+      }
+      .card h2 { margin: 0; font-size: 1.05rem; }
+      .links {
+        margin-top: 0.8rem;
+        display: flex;
+        gap: 0.55rem;
+        flex-wrap: wrap;
+      }
+      .links a {
+        color: #c8d6ff;
+        text-decoration: none;
+        border: 1px solid #2b3a56;
+        border-radius: 999px;
+        padding: 0.4rem 0.65rem;
+        font-size: 0.78rem;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+      }
+      pre {
+        margin: 0.75rem 0 0;
+        padding: 0.85rem;
+        border: 1px solid #2b3a56;
+        border-radius: 10px;
+        background: #090e18;
+        color: #eef2ff;
+        overflow: auto;
+      }
+      code { font-family: ui-monospace, Menlo, Consolas, monospace; }
     </style>
   </head>
   <body>
-    <h1>AI Bot Registry API</h1>
-    <p class="muted">Starter API surface for bot identity records, keys, and policy-managed operations.</p>
-    <p>Health check: <code>/health</code> | API root: <code>/v1</code> | OpenAPI JSON: <code>/openapi.json</code> | Swagger UI: <code>/swagger</code></p>
-    <p><strong>Auth model:</strong> mutation routes require signed payloads via <code>proof</code> or <code>proof_set</code> (m-of-n policy).</p>
-    <table>
-      <thead><tr><th>Method</th><th>Path</th><th>Operation</th><th>Status</th></tr></thead>
-      <tbody>
-        <tr><td>GET</td><td><code>/health</code></td><td>Service health</td><td>Implemented</td></tr>
-        <tr><td>GET</td><td><code>/v1</code></td><td>API metadata</td><td>Implemented</td></tr>
-        <tr><td>GET</td><td><code>/v1/stats</code></td><td>Registry stats</td><td>Implemented</td></tr>
-        <tr><td>GET</td><td><code>/v1/nonce</code></td><td>Issue nonce</td><td>Implemented</td></tr>
-        <tr><td>POST</td><td><code>/v1/bots</code></td><td>Create bot</td><td>Implemented</td></tr>
-        <tr><td>GET</td><td><code>/v1/bots/{bot_id}</code></td><td>Get bot</td><td>Implemented</td></tr>
-        <tr><td>PATCH</td><td><code>/v1/bots/{bot_id}</code></td><td>Update bot</td><td>Implemented</td></tr>
-        <tr><td>POST</td><td><code>/v1/bots/{bot_id}/keys</code></td><td>Add key</td><td>Implemented</td></tr>
-        <tr><td>DELETE</td><td><code>/v1/bots/{bot_id}/keys/{key_id}</code></td><td>Remove key</td><td>Implemented</td></tr>
-        <tr><td>POST</td><td><code>/v1/bots/{bot_id}/rotate</code></td><td>Rotate key</td><td>Implemented</td></tr>
-        <tr><td>POST</td><td><code>/v1/bots/{bot_id}/revoke</code></td><td>Revoke bot</td><td>Implemented</td></tr>
-        <tr><td>POST</td><td><code>/v1/attestations</code></td><td>Publish attestation</td><td>Implemented</td></tr>
-        <tr><td>GET</td><td><code>/v1/search</code></td><td>Search bots</td><td>Implemented</td></tr>
-      </tbody>
-    </table>
+    <main>
+      <section class="top">
+        <h1>Botnet Documentation</h1>
+        <p>Pick a track based on what you are building: raw HTTP integration through the API, or command-driven workflows with the CLI.</p>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <h2>API docs</h2>
+          <p>Endpoints, auth model, and cURL examples for bot lifecycle operations.</p>
+          <div class="links">
+            <a href="/docs/api">Open API guide</a>
+            <a href="/openapi.json">openapi.json</a>
+            <a href="/swagger">swagger</a>
+          </div>
+        </article>
+        <article class="card">
+          <h2>CLI docs</h2>
+          <p>Install and use <code>botnet</code> for register/search/rotate/revoke flows.</p>
+          <div class="links">
+            <a href="/docs/cli">Open CLI guide</a>
+            <a href="/install.sh">install.sh</a>
+          </div>
+        </article>
+      </section>
+
+      <section class="card" style="margin-top: 1rem;">
+        <h2 style="margin:0;">Quick install</h2>
+        <pre><code>curl -fsSL https://botnet.pub/install.sh | sh</code></pre>
+      </section>
+    </main>
   </body>
 </html>
-"#,
+"##,
+    )
+}
+
+async fn docs_api() -> impl IntoResponse {
+    Html(
+        r##"<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>botnet.pub API docs</title>
+    <style>
+      :root { --bg:#070a11; --panel:#0c1220; --line:#1f2a3c; --text:#e5e7ef; --muted:#9aa6bb; }
+      * { box-sizing:border-box; }
+      body { margin:0; font-family: "SF Pro Text", "Inter", system-ui, sans-serif; color:var(--text); background:var(--bg); }
+      main { max-width:1020px; margin:0 auto; padding:2rem 1rem; }
+      .top, .card { border:1px solid var(--line); border-radius:14px; background:var(--panel); padding:1rem; }
+      .top h1 { margin:0; font-size:clamp(1.8rem,4vw,2.5rem); letter-spacing:-0.02em; }
+      .muted { color:var(--muted); }
+      .links { margin-top:.8rem; display:flex; gap:.55rem; flex-wrap:wrap; }
+      .links a { color:#c8d6ff; text-decoration:none; border:1px solid #2b3a56; border-radius:999px; padding:.4rem .65rem; font-size:.78rem; font-family:ui-monospace, Menlo, Consolas, monospace; }
+      table { width:100%; border-collapse:collapse; margin-top:.75rem; }
+      th,td { border:1px solid #24324a; padding:.55rem; text-align:left; font-size:.9rem; vertical-align:top; }
+      th { background:#10192a; }
+      code, pre { font-family:ui-monospace, Menlo, Consolas, monospace; }
+      pre { margin:.75rem 0 0; padding:.85rem; border:1px solid #2b3a56; border-radius:10px; background:#090e18; color:#eef2ff; overflow:auto; }
+      h2 { margin:0; font-size:1rem; }
+      .stack { display:grid; gap:.85rem; margin-top:1rem; }
+      a.back { display:inline-block; margin-bottom:.8rem; color:#93c5fd; text-decoration:none; font-size:.9rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="back" href="/docs">← docs index</a>
+      <section class="top">
+        <h1>API Guide</h1>
+        <p class="muted">Base URL: <code>https://botnet.pub/v1</code>. Mutations require signed payloads via <code>proof</code> or <code>proof_set</code>.</p>
+        <div class="links">
+          <a href="/openapi.json">openapi.json</a>
+          <a href="/swagger">swagger ui</a>
+          <a href="/health">health</a>
+          <a href="/v1/stats">stats</a>
+        </div>
+      </section>
+
+      <section class="stack">
+        <article class="card">
+          <h2>Auth model</h2>
+          <p class="muted">For writes, clients sign the JCS-canonicalized payload (with proof fields removed). Server validates signatures and applies operation policy thresholds.</p>
+          <pre><code>{
+  "proof": {
+    "algorithm": "Ed25519",
+    "key_id": "k1",
+    "created": "2026-02-15T00:00:00Z",
+    "jws": "&lt;detached-jws&gt;"
+  }
+}</code></pre>
+        </article>
+
+        <article class="card">
+          <h2>Core endpoints</h2>
+          <table>
+            <thead><tr><th>Method</th><th>Path</th><th>Purpose</th><th>Auth</th></tr></thead>
+            <tbody>
+              <tr><td>GET</td><td><code>/v1</code></td><td>API metadata</td><td>No</td></tr>
+              <tr><td>GET</td><td><code>/v1/stats</code></td><td>Registry metrics</td><td>No</td></tr>
+              <tr><td>POST</td><td><code>/v1/bots</code></td><td>Create bot</td><td>Yes</td></tr>
+              <tr><td>PATCH</td><td><code>/v1/bots/{bot_id}</code></td><td>Update bot</td><td>Yes</td></tr>
+              <tr><td>POST</td><td><code>/v1/bots/{bot_id}/keys</code></td><td>Add key</td><td>Yes</td></tr>
+              <tr><td>DELETE</td><td><code>/v1/bots/{bot_id}/keys/{key_id}</code></td><td>Revoke key</td><td>Yes</td></tr>
+              <tr><td>POST</td><td><code>/v1/bots/{bot_id}/rotate</code></td><td>Rotate key</td><td>Yes</td></tr>
+              <tr><td>POST</td><td><code>/v1/bots/{bot_id}/revoke</code></td><td>Revoke bot</td><td>Yes</td></tr>
+              <tr><td>POST</td><td><code>/v1/attestations</code></td><td>Publish attestation</td><td>Issuer sig</td></tr>
+              <tr><td>GET</td><td><code>/v1/search</code></td><td>Search bots</td><td>No</td></tr>
+              <tr><td>GET</td><td><code>/v1/nonce</code></td><td>Issue nonce</td><td>No</td></tr>
+            </tbody>
+          </table>
+        </article>
+
+        <article class="card">
+          <h2>cURL examples</h2>
+          <pre><code># Read stats
+curl -sSf https://botnet.pub/v1/stats
+
+# Search
+curl -sSf "https://botnet.pub/v1/search?q=assistant&limit=5"
+
+# Create/update requests must include proof/proof_set
+curl -sSf -X POST https://botnet.pub/v1/bots \
+  -H "content-type: application/json" \
+  --data @signed-bot-record.json</code></pre>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>
+"##,
+    )
+}
+
+async fn docs_cli() -> impl IntoResponse {
+    Html(
+        r##"<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>botnet.pub CLI docs</title>
+    <style>
+      :root { --bg:#070a11; --panel:#0c1220; --line:#1f2a3c; --text:#e5e7ef; --muted:#9aa6bb; }
+      * { box-sizing:border-box; }
+      body { margin:0; font-family: "SF Pro Text", "Inter", system-ui, sans-serif; color:var(--text); background:var(--bg); }
+      main { max-width:980px; margin:0 auto; padding:2rem 1rem; }
+      .top, .card { border:1px solid var(--line); border-radius:14px; background:var(--panel); padding:1rem; }
+      .top h1 { margin:0; font-size:clamp(1.8rem,4vw,2.5rem); letter-spacing:-0.02em; }
+      .muted { color:var(--muted); line-height:1.55; }
+      .stack { display:grid; gap:.85rem; margin-top:1rem; }
+      table { width:100%; border-collapse:collapse; margin-top:.75rem; }
+      th,td { border:1px solid #24324a; padding:.55rem; text-align:left; font-size:.9rem; vertical-align:top; }
+      th { background:#10192a; }
+      code, pre { font-family:ui-monospace, Menlo, Consolas, monospace; }
+      pre { margin:.75rem 0 0; padding:.85rem; border:1px solid #2b3a56; border-radius:10px; background:#090e18; color:#eef2ff; overflow:auto; }
+      h2 { margin:0; font-size:1rem; }
+      a.back { display:inline-block; margin-bottom:.8rem; color:#93c5fd; text-decoration:none; font-size:.9rem; }
+      .links { margin-top:.8rem; display:flex; gap:.55rem; flex-wrap:wrap; }
+      .links a { color:#c8d6ff; text-decoration:none; border:1px solid #2b3a56; border-radius:999px; padding:.4rem .65rem; font-size:.78rem; font-family:ui-monospace, Menlo, Consolas, monospace; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="back" href="/docs">← docs index</a>
+      <section class="top">
+        <h1>CLI Guide</h1>
+        <p class="muted">`botnet` is the command-line client for registry workflows. Use it for key ops, lifecycle updates, and search.</p>
+        <div class="links">
+          <a href="/install.sh">install.sh</a>
+          <a href="/docs/api">api guide</a>
+        </div>
+      </section>
+
+      <section class="stack">
+        <article class="card">
+          <h2>Install</h2>
+          <pre><code>curl -fsSL https://botnet.pub/install.sh | sh
+botnet --help</code></pre>
+        </article>
+
+        <article class="card">
+          <h2>Global flags</h2>
+          <table>
+            <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>--base-url</code></td><td>API base URL. Default: <code>http://localhost:8080/v1</code></td></tr>
+              <tr><td><code>--key-id</code></td><td>Signing key id used for signed mutation commands.</td></tr>
+              <tr><td><code>--secret-seed-hex</code></td><td>32-byte Ed25519 seed in hex for local signing.</td></tr>
+            </tbody>
+          </table>
+        </article>
+
+        <article class="card">
+          <h2>Commands</h2>
+          <table>
+            <thead><tr><th>Command</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><code>register FILE</code></td><td>Create bot from JSON file (signed).</td></tr>
+              <tr><td><code>get BOT_ID</code></td><td>Fetch one bot.</td></tr>
+              <tr><td><code>update BOT_ID FILE</code></td><td>Replace mutable bot fields (signed).</td></tr>
+              <tr><td><code>add-key BOT_ID FILE</code></td><td>Add signing key (signed).</td></tr>
+              <tr><td><code>remove-key BOT_ID KEY_ID --reason ...</code></td><td>Revoke signing key (signed).</td></tr>
+              <tr><td><code>rotate-key BOT_ID FILE</code></td><td>Rotate key in one operation (signed).</td></tr>
+              <tr><td><code>revoke-bot BOT_ID --reason ...</code></td><td>Revoke bot identity (signed).</td></tr>
+              <tr><td><code>publish-attestation SUBJECT_BOT_ID FILE</code></td><td>Publish issuer-signed attestation.</td></tr>
+              <tr><td><code>search --q ... --status ... --limit ...</code></td><td>Search registry.</td></tr>
+              <tr><td><code>nonce</code></td><td>Fetch nonce for anti-replay support.</td></tr>
+            </tbody>
+          </table>
+        </article>
+
+        <article class="card">
+          <h2>Examples</h2>
+          <pre><code># Search
+botnet --base-url https://botnet.pub/v1 search --q assistant --limit 5
+
+# Fetch stats through API
+curl -sSf https://botnet.pub/v1/stats
+
+# Register with local key material
+botnet --base-url https://botnet.pub/v1 \
+  --key-id k1 \
+  --secret-seed-hex 001122... \
+  register bot.json</code></pre>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>
+"##,
     )
 }
 
@@ -1979,7 +2244,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn docs_returns_html() {
+    async fn docs_index_returns_html() {
         let app = app_router(AppState::default());
         let response = app
             .oneshot(Request::builder().uri("/docs").body(Body::empty()).unwrap())
@@ -1990,8 +2255,50 @@ mod tests {
             .await
             .expect("body");
         let body = String::from_utf8(bytes.to_vec()).expect("utf8");
-        assert!(body.contains("AI Bot Registry API"));
+        assert!(body.contains("Botnet Documentation"));
+        assert!(body.contains("/docs/api"));
+    }
+
+    #[tokio::test]
+    async fn docs_api_returns_html() {
+        let app = app_router(AppState::default());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/docs/api")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("request");
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let body = String::from_utf8(bytes.to_vec()).expect("utf8");
+        assert!(body.contains("API Guide"));
         assert!(body.contains("/v1/bots"));
+    }
+
+    #[tokio::test]
+    async fn docs_cli_returns_html() {
+        let app = app_router(AppState::default());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/docs/cli")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("request");
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let body = String::from_utf8(bytes.to_vec()).expect("utf8");
+        assert!(body.contains("CLI Guide"));
+        assert!(body.contains("botnet --help"));
     }
 
     #[tokio::test]
