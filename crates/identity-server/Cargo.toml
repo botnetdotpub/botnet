@@ -16,6 +16,7 @@ chrono.workspace = true
 hex.workspace = true
 identity-core = { path = "../identity-core" }
 identity-crypto = { path = "../identity-crypto" }
+identity-cli = { path = "../identity-cli" }
 identity-policy = { path = "../identity-policy" }
 identity-storage = { path = "../identity-storage" }
 multibase.workspace = true

@@ -1135,6 +1135,7 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "http",
+ "identity-cli",
  "identity-core",
  "identity-crypto",
  "identity-policy",

@@ -6,6 +6,7 @@ use axum::{
     Json, Router,
 };
 use chrono::{SecondsFormat, Utc};
+use identity_cli::{generate_cli_docs, CliCommandDoc};
 use identity_core::{
     bot_id::derive_bot_id, canonical::canonicalize, validation::validate_bot_record, Attestation,
     BotRecord, BotStatus, Controller, Delegation, Endpoint, Evidence, KeyRef, Owner, Policy,
@@ -15,6 +16,7 @@ use identity_crypto::{keys::verifying_key_from_jwk, verify_compact_jws};
 use identity_policy::eval::{evaluate_threshold, Operation};
 use identity_storage::{MemoryStore, SqliteStore, Storage};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::{collections::HashSet, net::SocketAddr, sync::Arc};
 use tower_http::trace::TraceLayer;
 use utoipa::{IntoParams, OpenApi, ToSchema};
@@ -808,314 +810,1205 @@ async fn install_script() -> impl IntoResponse {
     )
 }
 
+#[derive(Debug)]
+struct ApiDocsModel {
+    endpoints: Vec<ApiEndpointDoc>,
+    schemas: Vec<ApiSchemaDoc>,
+}
+
+#[derive(Debug)]
+struct ApiEndpointDoc {
+    method: String,
+    path: String,
+    summary: String,
+    description: Option<String>,
+    operation_id: Option<String>,
+    auth: String,
+    parameters: Vec<ApiParameterDoc>,
+    request_body: Option<String>,
+    responses: Vec<ApiResponseDoc>,
+}
+
+#[derive(Debug)]
+struct ApiParameterDoc {
+    name: String,
+    location: String,
+    required: bool,
+    schema: String,
+    description: Option<String>,
+}
+
+#[derive(Debug)]
+struct ApiResponseDoc {
+    status: String,
+    description: Option<String>,
+}
+
+#[derive(Debug)]
+struct ApiSchemaDoc {
+    name: String,
+    kind: String,
+    required_fields: usize,
+    property_count: usize,
+}
+
 async fn docs_index() -> impl IntoResponse {
-    Html(
-        r##"<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>botnet.pub docs</title>
-    <style>
-      :root {
-        --bg: #070a11;
-        --panel: #0c1220;
-        --line: #1f2a3c;
-        --text: #e5e7ef;
-        --muted: #9aa6bb;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        font-family: "SF Pro Text", "Inter", system-ui, sans-serif;
-        color: var(--text);
-        background:
-          radial-gradient(900px 340px at 12% -5%, rgba(34, 211, 238, 0.10), transparent 55%),
-          radial-gradient(700px 300px at 95% 10%, rgba(99, 102, 241, 0.10), transparent 58%),
-          var(--bg);
-      }
-      main { max-width: 980px; margin: 0 auto; padding: 2rem 1rem; }
-      h1 { margin: 0; font-size: clamp(1.9rem, 4vw, 2.8rem); letter-spacing: -0.02em; }
-      p { color: var(--muted); line-height: 1.55; }
-      .top {
-        border: 1px solid var(--line);
-        border-radius: 16px;
-        padding: 1.1rem;
-        background: rgba(10, 14, 24, 0.85);
-      }
-      .grid {
-        margin-top: 1rem;
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-        gap: 0.9rem;
-      }
-      .card {
-        border: 1px solid var(--line);
-        border-radius: 14px;
-        padding: 1rem;
-        background: var(--panel);
-      }
-      .card h2 { margin: 0; font-size: 1.05rem; }
-      .links {
-        margin-top: 0.8rem;
-        display: flex;
-        gap: 0.55rem;
-        flex-wrap: wrap;
-      }
-      .links a {
-        color: #c8d6ff;
-        text-decoration: none;
-        border: 1px solid #2b3a56;
-        border-radius: 999px;
-        padding: 0.4rem 0.65rem;
-        font-size: 0.78rem;
-        font-family: ui-monospace, Menlo, Consolas, monospace;
-      }
-      pre {
-        margin: 0.75rem 0 0;
-        padding: 0.85rem;
-        border: 1px solid #2b3a56;
-        border-radius: 10px;
-        background: #090e18;
-        color: #eef2ff;
-        overflow: auto;
-      }
-      code { font-family: ui-monospace, Menlo, Consolas, monospace; }
-    </style>
-  </head>
-  <body>
-    <main>
-      <section class="top">
-        <h1>Botnet Documentation</h1>
-        <p>Pick a track based on what you are building: raw HTTP integration through the API, or command-driven workflows with the CLI.</p>
-      </section>
+    let api_docs = build_api_docs_model();
+    let cli_docs = generate_cli_docs();
+    let command_count = count_cli_commands(&cli_docs.commands);
 
-      <section class="grid">
-        <article class="card">
-          <h2>API docs</h2>
-          <p>Endpoints, auth model, and cURL examples for bot lifecycle operations.</p>
-          <div class="links">
-            <a href="/docs/api">Open API guide</a>
-            <a href="/openapi.json">openapi.json</a>
-            <a href="/swagger">swagger</a>
-          </div>
-        </article>
-        <article class="card">
-          <h2>CLI docs</h2>
-          <p>Install and use <code>botnet</code> for register/search/rotate/revoke flows.</p>
-          <div class="links">
-            <a href="/docs/cli">Open CLI guide</a>
-            <a href="/install.sh">install.sh</a>
-          </div>
-        </article>
-      </section>
+    let sidebar_html = r##"
+        <div class="side-group">
+          <div class="side-title">Getting Started</div>
+          <a href="/docs" class="side-link active">Overview</a>
+          <a href="/docs/api" class="side-link">API Reference</a>
+          <a href="/docs/cli" class="side-link">CLI Reference</a>
+        </div>
+        <div class="side-group">
+          <div class="side-title">Resources</div>
+          <a href="/openapi.json" class="side-link">OpenAPI Spec</a>
+          <a href="/swagger" class="side-link">Swagger UI</a>
+          <a href="/install.sh" class="side-link">Install Script</a>
+        </div>
+    "##;
 
-      <section class="card" style="margin-top: 1rem;">
-        <h2 style="margin:0;">Quick install</h2>
-        <pre><code>curl -fsSL https://botnet.pub/install.sh | sh</code></pre>
-      </section>
-    </main>
-  </body>
-</html>
-"##,
-    )
+    let content_html = format!(
+        r##"
+        <section id="welcome" class="doc-section">
+          <h1>Documentation Home</h1>
+          <p>Docs are generated from Rust source-of-truth metadata: HTTP endpoints and schemas from <code>utoipa</code> OpenAPI generation, and CLI commands from Clap command definitions.</p>
+        </section>
+        <section id="coverage" class="doc-section">
+          <h2>Generated Coverage</h2>
+          <table>
+            <thead><tr><th>Surface</th><th>Source</th><th>Coverage</th></tr></thead>
+            <tbody>
+              <tr><td>API</td><td><code>ApiDoc::openapi()</code></td><td>{} endpoints / {} schemas</td></tr>
+              <tr><td>CLI</td><td><code>Cli::command()</code></td><td>{} commands</td></tr>
+            </tbody>
+          </table>
+        </section>
+        <section id="quickstart" class="doc-section">
+          <h2>Quickstart</h2>
+          <p>Install the CLI and query the registry in under a minute.</p>
+          <pre><code>curl -fsSL https://botnet.pub/install.sh | sh
+botnet --base-url https://botnet.pub/v1 search --limit 5</code></pre>
+        </section>
+        <section id="choose-path" class="doc-section">
+          <h2>Choose Your Path</h2>
+          <div class="doc-grid">
+            <article class="mini-card">
+              <h3>API Track</h3>
+              <p>Endpoint contracts, auth requirements, request/response schemas, and route-level details.</p>
+              <a href="/docs/api">Open API Reference</a>
+            </article>
+            <article class="mini-card">
+              <h3>CLI Track</h3>
+              <p>Global flags, command catalog, and generated help output for every CLI command.</p>
+              <a href="/docs/cli">Open CLI Reference</a>
+            </article>
+          </div>
+        </section>
+        "##,
+        api_docs.endpoints.len(),
+        api_docs.schemas.len(),
+        command_count
+    );
+
+    let toc_html = r##"
+        <a href="#welcome">Welcome</a>
+        <a href="#coverage">Coverage</a>
+        <a href="#quickstart">Quickstart</a>
+        <a href="#choose-path">Choose Path</a>
+    "##;
+
+    docs_shell(DocsShellArgs {
+        page_title: "Documentation Home",
+        page_subtitle: "Generated from Rust handlers, schemas, and command definitions.",
+        sidebar_html,
+        content_html: &content_html,
+        toc_html,
+        home_active: true,
+        api_active: false,
+        cli_active: false,
+    })
 }
 
 async fn docs_api() -> impl IntoResponse {
-    Html(
-        r##"<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>botnet.pub API docs</title>
-    <style>
-      :root { --bg:#070a11; --panel:#0c1220; --line:#1f2a3c; --text:#e5e7ef; --muted:#9aa6bb; }
-      * { box-sizing:border-box; }
-      body { margin:0; font-family: "SF Pro Text", "Inter", system-ui, sans-serif; color:var(--text); background:var(--bg); }
-      main { max-width:1020px; margin:0 auto; padding:2rem 1rem; }
-      .top, .card { border:1px solid var(--line); border-radius:14px; background:var(--panel); padding:1rem; }
-      .top h1 { margin:0; font-size:clamp(1.8rem,4vw,2.5rem); letter-spacing:-0.02em; }
-      .muted { color:var(--muted); }
-      .links { margin-top:.8rem; display:flex; gap:.55rem; flex-wrap:wrap; }
-      .links a { color:#c8d6ff; text-decoration:none; border:1px solid #2b3a56; border-radius:999px; padding:.4rem .65rem; font-size:.78rem; font-family:ui-monospace, Menlo, Consolas, monospace; }
-      table { width:100%; border-collapse:collapse; margin-top:.75rem; }
-      th,td { border:1px solid #24324a; padding:.55rem; text-align:left; font-size:.9rem; vertical-align:top; }
-      th { background:#10192a; }
-      code, pre { font-family:ui-monospace, Menlo, Consolas, monospace; }
-      pre { margin:.75rem 0 0; padding:.85rem; border:1px solid #2b3a56; border-radius:10px; background:#090e18; color:#eef2ff; overflow:auto; }
-      h2 { margin:0; font-size:1rem; }
-      .stack { display:grid; gap:.85rem; margin-top:1rem; }
-      a.back { display:inline-block; margin-bottom:.8rem; color:#93c5fd; text-decoration:none; font-size:.9rem; }
-    </style>
-  </head>
-  <body>
-    <main>
-      <a class="back" href="/docs">← docs index</a>
-      <section class="top">
-        <h1>API Guide</h1>
-        <p class="muted">Base URL: <code>https://botnet.pub/v1</code>. Mutations require signed payloads via <code>proof</code> or <code>proof_set</code>.</p>
-        <div class="links">
-          <a href="/openapi.json">openapi.json</a>
-          <a href="/swagger">swagger ui</a>
-          <a href="/health">health</a>
-          <a href="/v1/stats">stats</a>
-        </div>
-      </section>
+    let api_docs = build_api_docs_model();
 
-      <section class="stack">
-        <article class="card">
-          <h2>Auth model</h2>
-          <p class="muted">For writes, clients sign the JCS-canonicalized payload (with proof fields removed). Server validates signatures and applies operation policy thresholds.</p>
-          <pre><code>{
-  "proof": {
+    let sidebar_html = r##"
+        <div class="side-group">
+          <div class="side-title">Developers</div>
+          <a href="/docs" class="side-link">Overview</a>
+          <a href="/docs/api" class="side-link active">API Reference</a>
+          <a href="/docs/cli" class="side-link">CLI Reference</a>
+        </div>
+        <div class="side-group">
+          <div class="side-title">API Guide</div>
+          <a href="#overview" class="side-link">Overview</a>
+          <a href="#auth-flow" class="side-link">Auth Flow</a>
+          <a href="#quickstart-reads" class="side-link">Read Quickstart</a>
+          <a href="#quickstart-mutations" class="side-link">Mutation Quickstart</a>
+          <a href="#matrix" class="side-link">Endpoint Matrix</a>
+          <a href="#details" class="side-link">Endpoint Details</a>
+          <a href="#schemas" class="side-link">Schema Catalog</a>
+        </div>
+        <div class="side-group">
+          <div class="side-title">Tools</div>
+          <a href="/swagger" class="side-link">Swagger UI</a>
+          <a href="/openapi.json" class="side-link">OpenAPI JSON</a>
+        </div>
+        "##;
+
+    let mut matrix_rows = String::new();
+    let mut detail_sections = String::new();
+    for endpoint in &api_docs.endpoints {
+        matrix_rows.push_str(&format!(
+            r#"<tr><td><code>{}</code></td><td><code>{}</code></td><td>{}</td><td>{}</td></tr>"#,
+            escape_html(&endpoint.method),
+            escape_html(&endpoint.path),
+            escape_html(&endpoint.summary),
+            escape_html(&endpoint.auth)
+        ));
+
+        let mut parameter_rows = String::new();
+        for parameter in &endpoint.parameters {
+            let required = if parameter.required { "yes" } else { "no" };
+            parameter_rows.push_str(&format!(
+                r#"<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td><code>{}</code></td><td>{}</td></tr>"#,
+                escape_html(&parameter.name),
+                escape_html(&parameter.location),
+                required,
+                escape_html(&parameter.schema),
+                escape_html(parameter.description.as_deref().unwrap_or("-"))
+            ));
+        }
+        if parameter_rows.is_empty() {
+            parameter_rows.push_str(r#"<tr><td colspan="5">No parameters.</td></tr>"#);
+        }
+
+        let mut response_rows = String::new();
+        for response in &endpoint.responses {
+            response_rows.push_str(&format!(
+                r#"<tr><td><code>{}</code></td><td>{}</td></tr>"#,
+                escape_html(&response.status),
+                escape_html(response.description.as_deref().unwrap_or("-"))
+            ));
+        }
+
+        detail_sections.push_str(&format!(
+            r##"
+            <section id="{}" class="doc-section">
+              <h2><code>{}</code> <code>{}</code></h2>
+              <p>{}</p>
+              <p><strong>Auth:</strong> {}</p>
+              <p><strong>Operation ID:</strong> <code>{}</code></p>
+              <p><strong>Request Body:</strong> {}</p>
+              <table>
+                <thead><tr><th>Parameter</th><th>In</th><th>Required</th><th>Type</th><th>Description</th></tr></thead>
+                <tbody>{}</tbody>
+              </table>
+              <table>
+                <thead><tr><th>Status</th><th>Description</th></tr></thead>
+                <tbody>{}</tbody>
+              </table>
+              {}
+            </section>
+            "##,
+            endpoint_anchor(endpoint),
+            escape_html(&endpoint.method),
+            escape_html(&endpoint.path),
+            escape_html(&endpoint.summary),
+            escape_html(&endpoint.auth),
+            escape_html(endpoint.operation_id.as_deref().unwrap_or("unknown")),
+            endpoint
+                .request_body
+                .as_ref()
+                .map(|rb| format!("<code>{}</code>", escape_html(rb)))
+                .unwrap_or_else(|| "none".to_string()),
+            parameter_rows,
+            response_rows,
+            endpoint
+                .description
+                .as_ref()
+                .map(|desc| format!("<p>{}</p>", escape_html(desc)))
+                .unwrap_or_default(),
+        ));
+    }
+
+    let mut schema_rows = String::new();
+    for schema in &api_docs.schemas {
+        schema_rows.push_str(&format!(
+            r#"<tr><td><code>{}</code></td><td><code>{}</code></td><td>{}</td><td>{}</td></tr>"#,
+            escape_html(&schema.name),
+            escape_html(&schema.kind),
+            schema.property_count,
+            schema.required_fields
+        ));
+    }
+
+    let content_html = format!(
+        r##"
+        <section id="overview" class="doc-section">
+          <h1>API Reference</h1>
+          <p>This page combines human guidance with generated data. Endpoint contracts and schemas are extracted from the server's OpenAPI model, so docs stay aligned with Rust handlers and types.</p>
+          <p>Base URL: <code>https://botnet.pub/v1</code>.</p>
+        </section>
+        <section id="auth-flow" class="doc-section">
+          <h2>Auth Flow (Mutations)</h2>
+          <p>Reads are public. Mutations are proof-authenticated. For mutation routes, include exactly one of <code>proof</code> or <code>proof_set</code> in the JSON body.</p>
+          <p>Server verification steps:</p>
+          <ol>
+            <li>Remove <code>proof</code>/<code>proof_set</code> from payload.</li>
+            <li>Canonicalize payload with JCS.</li>
+            <li>Verify Ed25519 detached JWS signatures.</li>
+            <li>Resolve signer keys (self + controller keys when present).</li>
+            <li>Enforce policy threshold for the operation.</li>
+          </ol>
+          <pre><code>{{
+  "proof": {{
     "algorithm": "Ed25519",
     "key_id": "k1",
     "created": "2026-02-15T00:00:00Z",
     "jws": "&lt;detached-jws&gt;"
-  }
-}</code></pre>
-        </article>
+  }}
+}}</code></pre>
+        </section>
+        <section id="quickstart-reads" class="doc-section">
+          <h2>Read Quickstart</h2>
+          <pre><code># service metadata
+curl -sSf https://botnet.pub/v1
 
-        <article class="card">
-          <h2>Core endpoints</h2>
-          <table>
-            <thead><tr><th>Method</th><th>Path</th><th>Purpose</th><th>Auth</th></tr></thead>
-            <tbody>
-              <tr><td>GET</td><td><code>/v1</code></td><td>API metadata</td><td>No</td></tr>
-              <tr><td>GET</td><td><code>/v1/stats</code></td><td>Registry metrics</td><td>No</td></tr>
-              <tr><td>POST</td><td><code>/v1/bots</code></td><td>Create bot</td><td>Yes</td></tr>
-              <tr><td>PATCH</td><td><code>/v1/bots/{bot_id}</code></td><td>Update bot</td><td>Yes</td></tr>
-              <tr><td>POST</td><td><code>/v1/bots/{bot_id}/keys</code></td><td>Add key</td><td>Yes</td></tr>
-              <tr><td>DELETE</td><td><code>/v1/bots/{bot_id}/keys/{key_id}</code></td><td>Revoke key</td><td>Yes</td></tr>
-              <tr><td>POST</td><td><code>/v1/bots/{bot_id}/rotate</code></td><td>Rotate key</td><td>Yes</td></tr>
-              <tr><td>POST</td><td><code>/v1/bots/{bot_id}/revoke</code></td><td>Revoke bot</td><td>Yes</td></tr>
-              <tr><td>POST</td><td><code>/v1/attestations</code></td><td>Publish attestation</td><td>Issuer sig</td></tr>
-              <tr><td>GET</td><td><code>/v1/search</code></td><td>Search bots</td><td>No</td></tr>
-              <tr><td>GET</td><td><code>/v1/nonce</code></td><td>Issue nonce</td><td>No</td></tr>
-            </tbody>
-          </table>
-        </article>
+# health
+curl -sSf https://botnet.pub/health
 
-        <article class="card">
-          <h2>cURL examples</h2>
-          <pre><code># Read stats
+# stats
 curl -sSf https://botnet.pub/v1/stats
 
-# Search
+# search
 curl -sSf "https://botnet.pub/v1/search?q=assistant&limit=5"
 
-# Create/update requests must include proof/proof_set
+# fetch by id
+curl -sSf https://botnet.pub/v1/bots/&lt;BOT_ID&gt;</code></pre>
+        </section>
+        <section id="quickstart-mutations" class="doc-section">
+          <h2>Mutation Quickstart</h2>
+          <p>1) Build the operation payload file without proof fields.</p>
+          <p>2) Canonicalize and sign that payload using your Ed25519 key.</p>
+          <p>3) Attach <code>proof</code> (or <code>proof_set</code>) and submit.</p>
+          <pre><code># create bot (signed payload)
 curl -sSf -X POST https://botnet.pub/v1/bots \
   -H "content-type: application/json" \
-  --data @signed-bot-record.json</code></pre>
-        </article>
-      </section>
-    </main>
-  </body>
-</html>
-"##,
-    )
+  --data @signed-bot-record.json
+
+# add key (signed payload)
+curl -sSf -X POST https://botnet.pub/v1/bots/&lt;BOT_ID&gt;/keys \
+  -H "content-type: application/json" \
+  --data @signed-add-key.json
+
+# revoke bot (signed payload)
+curl -sSf -X POST https://botnet.pub/v1/bots/&lt;BOT_ID&gt;/revoke \
+  -H "content-type: application/json" \
+  --data @signed-revoke.json</code></pre>
+        </section>
+        <section id="matrix" class="doc-section">
+          <h2>Endpoint Matrix</h2>
+          <table>
+            <thead><tr><th>Method</th><th>Path</th><th>Summary</th><th>Auth</th></tr></thead>
+            <tbody>{}</tbody>
+          </table>
+        </section>
+        <section id="details" class="doc-section">
+          <h2>Endpoint Details</h2>
+          <p>Each endpoint below includes operation ID, auth semantics, parameters, request body shape, and response codes directly extracted from OpenAPI.</p>
+        </section>
+        {}
+        <section id="schemas" class="doc-section">
+          <h2>Schema Catalog</h2>
+          <table>
+            <thead><tr><th>Schema</th><th>Kind</th><th>Properties</th><th>Required</th></tr></thead>
+            <tbody>{}</tbody>
+          </table>
+        </section>
+        "##,
+        matrix_rows, detail_sections, schema_rows
+    );
+
+    let toc_html = String::from(
+        r##"
+        <a href="#overview">Overview</a>
+        <a href="#auth-flow">Auth Flow</a>
+        <a href="#quickstart-reads">Read Quickstart</a>
+        <a href="#quickstart-mutations">Mutation Quickstart</a>
+        <a href="#matrix">Endpoint Matrix</a>
+        <a href="#details">Endpoint Details</a>
+        <a href="#schemas">Schema Catalog</a>
+    "##,
+    );
+
+    docs_shell(DocsShellArgs {
+        page_title: "API Reference",
+        page_subtitle: "Human guide plus generated OpenAPI route and schema reference.",
+        sidebar_html,
+        content_html: &content_html,
+        toc_html: &toc_html,
+        home_active: false,
+        api_active: true,
+        cli_active: false,
+    })
 }
 
 async fn docs_cli() -> impl IntoResponse {
-    Html(
+    let cli_docs = generate_cli_docs();
+    let mut command_docs = Vec::new();
+    flatten_cli_commands(&cli_docs.commands, &mut command_docs);
+
+    let mut command_nav = String::new();
+    for command in &cli_docs.commands {
+        command_nav.push_str(&format!(
+            r##"<a href="#{}" class="side-link"><code>{}</code></a>"##,
+            cli_command_anchor(command),
+            escape_html(&command.invocation)
+        ));
+    }
+
+    let sidebar_html = format!(
+        r##"
+        <div class="side-group">
+          <div class="side-title">Developers</div>
+          <a href="/docs" class="side-link">Overview</a>
+          <a href="/docs/api" class="side-link">API Reference</a>
+          <a href="/docs/cli" class="side-link active">CLI Reference</a>
+        </div>
+        <div class="side-group">
+          <div class="side-title">CLI Guide</div>
+          <a href="#install" class="side-link">Install</a>
+          <a href="#quickstart" class="side-link">Quickstart</a>
+          <a href="#signing" class="side-link">Signing Model</a>
+          <a href="#inputs" class="side-link">JSON Inputs</a>
+          <a href="#playbooks" class="side-link">Command Playbooks</a>
+          <a href="#catalog" class="side-link">Generated Catalog</a>
+          <a href="#details" class="side-link">Command Details</a>
+        </div>
+        <div class="side-group">
+          <div class="side-title">Top Commands</div>
+          {}
+        </div>
+        "##,
+        command_nav
+    );
+
+    let mut catalog_rows = String::new();
+    let mut detail_sections = String::new();
+    for command in &command_docs {
+        let explanation = cli_command_explainer(command);
+        catalog_rows.push_str(&format!(
+            r#"<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td><code>{}</code></td></tr>"#,
+            escape_html(&command.invocation),
+            escape_html(explanation.purpose),
+            escape_html(command.about.as_deref().unwrap_or("-")),
+            escape_html(&command.usage)
+        ));
+
+        detail_sections.push_str(&format!(
+            r##"
+            <section id="{}" class="doc-section">
+              <h2><code>{}</code></h2>
+              <p>{}</p>
+              <p><strong>When to use:</strong> {}</p>
+              <p><strong>Input file:</strong> {}</p>
+              <p><strong>Usage:</strong> <code>{}</code></p>
+              <p><strong>Example:</strong></p>
+              <pre><code>{}</code></pre>
+              <pre><code>{}</code></pre>
+            </section>
+            "##,
+            cli_command_anchor(command),
+            escape_html(&command.invocation),
+            escape_html(command.about.as_deref().unwrap_or("No summary available.")),
+            escape_html(explanation.purpose),
+            escape_html(explanation.input_file),
+            escape_html(&command.usage),
+            escape_html(explanation.example),
+            escape_html(&command.help)
+        ));
+    }
+
+    let content_html = format!(
+        r##"
+        <section id="install" class="doc-section">
+          <h1>CLI Reference</h1>
+          <p>This page combines human task guides with generated command metadata from Clap. You get practical workflows plus up-to-date usage output from code.</p>
+          <pre><code>curl -fsSL https://botnet.pub/install.sh | sh
+botnet --help</code></pre>
+        </section>
+        <section id="quickstart" class="doc-section">
+          <h2>Quickstart</h2>
+          <p>Run a read-only check first, then run a signed mutation.</p>
+          <pre><code># read-only search
+botnet --base-url https://botnet.pub/v1 search --q assistant --limit 5
+
+# signed register
+botnet --base-url https://botnet.pub/v1 \
+  --key-id k1 \
+  --secret-seed-hex 0000000000000000000000000000000000000000000000000000000000000000 \
+  register bot.json</code></pre>
+        </section>
+        <section id="signing" class="doc-section">
+          <h2>Signing Model</h2>
+          <p>These commands require signing flags: <code>register</code>, <code>update</code>, <code>add-key</code>, <code>remove-key</code>, <code>rotate-key</code>, <code>revoke-bot</code>, <code>publish-attestation</code>.</p>
+          <p>Read-only commands do not require keys: <code>get</code>, <code>search</code>, <code>nonce</code>.</p>
+          <p>Use the same key ID and seed consistently for workflows that mutate the same bot identity.</p>
+        </section>
+        <section id="inputs" class="doc-section">
+          <h2>JSON Inputs</h2>
+          <p>Most mutation commands read JSON files. Start with these templates.</p>
+          <p><strong><code>register</code> / <code>update</code> file (<code>BotRecord</code>):</strong></p>
+          <pre><code>{{
+  "status": "active",
+  "display_name": "Example Bot",
+  "description": "Automates routine tasks.",
+  "public_keys": [
+    {{
+      "key_id": "k1",
+      "algorithm": "Ed25519",
+      "public_key_multibase": "z6Mke...",
+      "purpose": ["signing"],
+      "primary": true
+    }}
+  ],
+  "capabilities": ["calendar.read", "email.send"]
+}}</code></pre>
+          <p><strong><code>add-key</code> file (<code>PublicKey</code>):</strong></p>
+          <pre><code>{{
+  "key_id": "k2",
+  "algorithm": "Ed25519",
+  "public_key_multibase": "z6Mkh...",
+  "purpose": ["signing"],
+  "primary": false
+}}</code></pre>
+          <p><strong><code>rotate-key</code> file:</strong></p>
+          <pre><code>{{
+  "old_key_id": "k1",
+  "new_key": {{
+    "key_id": "k2",
+    "algorithm": "Ed25519",
+    "public_key_multibase": "z6Mkh...",
+    "purpose": ["signing"],
+    "primary": true
+  }}
+}}</code></pre>
+          <p><strong><code>publish-attestation</code> file (<code>Attestation</code>):</strong></p>
+          <pre><code>{{
+  "issuer_bot_id": "urn:bot:sha256:...",
+  "type": "compliance",
+  "statement": {{ "level": "gold" }},
+  "signature": {{
+    "algorithm": "Ed25519",
+    "key_id": "issuer-key",
+    "jws": "&lt;detached-jws&gt;"
+  }}
+}}</code></pre>
+        </section>
+        <section id="playbooks" class="doc-section">
+          <h2>Command Playbooks</h2>
+          <p>Use these common paths depending on your goal.</p>
+          <table>
+            <thead><tr><th>Goal</th><th>Command Sequence</th></tr></thead>
+            <tbody>
+              <tr><td>Create and verify a bot</td><td><code>register</code> → <code>get</code> → <code>search</code></td></tr>
+              <tr><td>Key lifecycle</td><td><code>add-key</code> → <code>rotate-key</code> → <code>remove-key</code></td></tr>
+              <tr><td>Shutdown identity</td><td><code>revoke-bot</code> (and verify via <code>get</code>)</td></tr>
+              <tr><td>Trust signals</td><td><code>publish-attestation</code> to subject bot record</td></tr>
+            </tbody>
+          </table>
+        </section>
+        <section id="catalog" class="doc-section">
+          <h2>Generated Catalog</h2>
+          <table>
+            <thead><tr><th>Command</th><th>Purpose</th><th>Help Summary</th><th>Usage</th></tr></thead>
+            <tbody>{}</tbody>
+          </table>
+        </section>
+        <section id="details" class="doc-section">
+          <h2>Command Details</h2>
+          <p>Human notes plus full generated help output for each command.</p>
+        </section>
+        {}
+        "##,
+        catalog_rows, detail_sections
+    );
+
+    let toc_html = String::from(
+        r##"
+        <a href="#install">Install</a>
+        <a href="#quickstart">Quickstart</a>
+        <a href="#signing">Signing Model</a>
+        <a href="#inputs">JSON Inputs</a>
+        <a href="#playbooks">Command Playbooks</a>
+        <a href="#catalog">Generated Catalog</a>
+        <a href="#details">Command Details</a>
+    "##,
+    );
+
+    docs_shell(DocsShellArgs {
+        page_title: "CLI Reference",
+        page_subtitle: "Human workflows plus generated command metadata from Clap.",
+        sidebar_html: &sidebar_html,
+        content_html: &content_html,
+        toc_html: &toc_html,
+        home_active: false,
+        api_active: false,
+        cli_active: true,
+    })
+}
+
+#[derive(Clone, Copy)]
+struct CliCommandGuide {
+    purpose: &'static str,
+    input_file: &'static str,
+    example: &'static str,
+}
+
+fn cli_command_explainer(command: &CliCommandDoc) -> CliCommandGuide {
+    match command.invocation.as_str() {
+        "botnet register" => CliCommandGuide {
+            purpose: "Create a new bot identity from a BotRecord JSON file.",
+            input_file: "BotRecord JSON file required.",
+            example: "botnet --base-url https://botnet.pub/v1 --key-id k1 --secret-seed-hex <SEED_HEX> register bot.json",
+        },
+        "botnet get" => CliCommandGuide {
+            purpose: "Fetch one bot record by bot ID.",
+            input_file: "No file input.",
+            example: "botnet --base-url https://botnet.pub/v1 get urn:bot:sha256:<id>",
+        },
+        "botnet update" => CliCommandGuide {
+            purpose: "Update mutable bot fields using a BotRecord JSON file.",
+            input_file: "BotRecord JSON file required.",
+            example: "botnet --base-url https://botnet.pub/v1 --key-id k1 --secret-seed-hex <SEED_HEX> update urn:bot:sha256:<id> bot-update.json",
+        },
+        "botnet add-key" => CliCommandGuide {
+            purpose: "Attach a new signing key to an existing bot.",
+            input_file: "PublicKey JSON file required.",
+            example: "botnet --base-url https://botnet.pub/v1 --key-id k1 --secret-seed-hex <SEED_HEX> add-key urn:bot:sha256:<id> new-key.json",
+        },
+        "botnet remove-key" => CliCommandGuide {
+            purpose: "Revoke an existing key on a bot.",
+            input_file: "No file input.",
+            example: "botnet --base-url https://botnet.pub/v1 --key-id k1 --secret-seed-hex <SEED_HEX> remove-key urn:bot:sha256:<id> k2 --reason compromised",
+        },
+        "botnet rotate-key" => CliCommandGuide {
+            purpose: "Rotate a key in one operation: revoke old key and add new key.",
+            input_file: "Rotate JSON file required (old_key_id + new_key).",
+            example: "botnet --base-url https://botnet.pub/v1 --key-id k1 --secret-seed-hex <SEED_HEX> rotate-key urn:bot:sha256:<id> rotate.json",
+        },
+        "botnet revoke-bot" => CliCommandGuide {
+            purpose: "Revoke the entire bot identity (status becomes revoked).",
+            input_file: "No file input.",
+            example: "botnet --base-url https://botnet.pub/v1 --key-id k1 --secret-seed-hex <SEED_HEX> revoke-bot urn:bot:sha256:<id> --reason retired",
+        },
+        "botnet publish-attestation" => CliCommandGuide {
+            purpose: "Publish an issuer-signed attestation to a subject bot.",
+            input_file: "Attestation JSON file required.",
+            example: "botnet --base-url https://botnet.pub/v1 --key-id issuer-key --secret-seed-hex <SEED_HEX> publish-attestation urn:bot:sha256:<subject> attestation.json",
+        },
+        "botnet search" => CliCommandGuide {
+            purpose: "Find bots by query, status, capability, and limit filters.",
+            input_file: "No file input.",
+            example: "botnet --base-url https://botnet.pub/v1 search --q assistant --status active --limit 20",
+        },
+        "botnet nonce" => CliCommandGuide {
+            purpose: "Fetch a server nonce for anti-replay signing flows.",
+            input_file: "No file input.",
+            example: "botnet --base-url https://botnet.pub/v1 nonce",
+        },
+        _ => CliCommandGuide {
+            purpose: "Run this command for specialized workflow actions.",
+            input_file: "See generated help output below.",
+            example: "botnet --help",
+        },
+    }
+}
+
+fn build_api_docs_model() -> ApiDocsModel {
+    let openapi = serde_json::to_value(ApiDoc::openapi()).unwrap_or(Value::Null);
+
+    let mut endpoints = Vec::new();
+    if let Some(paths) = openapi.get("paths").and_then(Value::as_object) {
+        for (path, path_item) in paths {
+            let Some(path_obj) = path_item.as_object() else {
+                continue;
+            };
+            for method in ["get", "post", "patch", "put", "delete", "options", "head"] {
+                let Some(operation) = path_obj.get(method).and_then(Value::as_object) else {
+                    continue;
+                };
+
+                let summary = operation
+                    .get("summary")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .unwrap_or_else(|| {
+                        operation
+                            .get("operationId")
+                            .and_then(Value::as_str)
+                            .map(prettify_identifier)
+                            .unwrap_or_else(|| "Untitled operation".to_string())
+                    });
+                let description = operation
+                    .get("description")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+                let operation_id = operation
+                    .get("operationId")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+                let auth = auth_requirement(method, path).to_string();
+
+                let mut parameters = Vec::new();
+                if let Some(params) = operation.get("parameters").and_then(Value::as_array) {
+                    for parameter in params {
+                        let Some(param) = parameter.as_object() else {
+                            continue;
+                        };
+                        parameters.push(ApiParameterDoc {
+                            name: param
+                                .get("name")
+                                .and_then(Value::as_str)
+                                .unwrap_or("unknown")
+                                .to_string(),
+                            location: param
+                                .get("in")
+                                .and_then(Value::as_str)
+                                .unwrap_or("query")
+                                .to_string(),
+                            required: param
+                                .get("required")
+                                .and_then(Value::as_bool)
+                                .unwrap_or(false),
+                            schema: param
+                                .get("schema")
+                                .map(describe_schema)
+                                .unwrap_or_else(|| "unknown".to_string()),
+                            description: param
+                                .get("description")
+                                .and_then(Value::as_str)
+                                .map(str::to_string),
+                        });
+                    }
+                }
+
+                let request_body = operation
+                    .get("requestBody")
+                    .and_then(|body| body.get("content"))
+                    .and_then(Value::as_object)
+                    .and_then(|content| {
+                        content
+                            .get("application/json")
+                            .or_else(|| content.values().next())
+                            .and_then(|entry| entry.get("schema"))
+                    })
+                    .map(describe_schema);
+
+                let mut responses = Vec::new();
+                if let Some(response_map) = operation.get("responses").and_then(Value::as_object) {
+                    for (status, response) in response_map {
+                        responses.push(ApiResponseDoc {
+                            status: status.to_string(),
+                            description: response
+                                .get("description")
+                                .and_then(Value::as_str)
+                                .map(str::to_string),
+                        });
+                    }
+                }
+                responses.sort_by(|a, b| a.status.cmp(&b.status));
+
+                endpoints.push(ApiEndpointDoc {
+                    method: method.to_ascii_uppercase(),
+                    path: path.to_string(),
+                    summary,
+                    description,
+                    operation_id,
+                    auth,
+                    parameters,
+                    request_body,
+                    responses,
+                });
+            }
+        }
+    }
+    endpoints.sort_by(|a, b| {
+        a.path
+            .cmp(&b.path)
+            .then_with(|| method_rank(&a.method).cmp(&method_rank(&b.method)))
+    });
+
+    let mut schemas = Vec::new();
+    if let Some(schema_map) = openapi
+        .get("components")
+        .and_then(|components| components.get("schemas"))
+        .and_then(Value::as_object)
+    {
+        for (name, schema) in schema_map {
+            let required_fields = schema
+                .get("required")
+                .and_then(Value::as_array)
+                .map_or(0, Vec::len);
+            let property_count = schema
+                .get("properties")
+                .and_then(Value::as_object)
+                .map_or(0, serde_json::Map::len);
+            let kind = describe_schema_kind(schema);
+            schemas.push(ApiSchemaDoc {
+                name: name.clone(),
+                kind,
+                required_fields,
+                property_count,
+            });
+        }
+    }
+    schemas.sort_by(|a, b| a.name.cmp(&b.name));
+
+    ApiDocsModel { endpoints, schemas }
+}
+
+fn flatten_cli_commands<'a>(commands: &'a [CliCommandDoc], out: &mut Vec<&'a CliCommandDoc>) {
+    for command in commands {
+        out.push(command);
+        flatten_cli_commands(&command.subcommands, out);
+    }
+}
+
+fn count_cli_commands(commands: &[CliCommandDoc]) -> usize {
+    let mut total = 0;
+    for command in commands {
+        total += 1 + count_cli_commands(&command.subcommands);
+    }
+    total
+}
+
+fn endpoint_anchor(endpoint: &ApiEndpointDoc) -> String {
+    slugify(&format!(
+        "{} {}",
+        endpoint.method.to_lowercase(),
+        endpoint.path
+    ))
+}
+
+fn cli_command_anchor(command: &CliCommandDoc) -> String {
+    slugify(&command.invocation)
+}
+
+fn method_rank(method: &str) -> u8 {
+    match method {
+        "GET" => 0,
+        "POST" => 1,
+        "PATCH" => 2,
+        "PUT" => 3,
+        "DELETE" => 4,
+        "OPTIONS" => 5,
+        "HEAD" => 6,
+        _ => 7,
+    }
+}
+
+fn auth_requirement(method: &str, path: &str) -> &'static str {
+    match (method, path) {
+        ("post", "/v1/bots")
+        | ("patch", "/v1/bots/{bot_id}")
+        | ("post", "/v1/bots/{bot_id}/keys")
+        | ("delete", "/v1/bots/{bot_id}/keys/{key_id}")
+        | ("post", "/v1/bots/{bot_id}/rotate")
+        | ("post", "/v1/bots/{bot_id}/revoke") => "proof or proof_set required",
+        ("post", "/v1/attestations") => "issuer attestation signature required",
+        _ => "public",
+    }
+}
+
+fn prettify_identifier(identifier: &str) -> String {
+    identifier
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                Some(first) => {
+                    format!(
+                        "{}{}",
+                        first.to_ascii_uppercase(),
+                        chars.as_str().to_ascii_lowercase()
+                    )
+                }
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn describe_schema(schema: &Value) -> String {
+    if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
+        return reference
+            .rsplit('/')
+            .next()
+            .unwrap_or(reference)
+            .to_string();
+    }
+
+    if let Some(schema_type) = schema.get("type").and_then(Value::as_str) {
+        if schema_type == "array" {
+            if let Some(item_schema) = schema.get("items") {
+                return format!("array<{}>", describe_schema(item_schema));
+            }
+            return "array".to_string();
+        }
+        return schema_type.to_string();
+    }
+
+    if schema.get("oneOf").is_some() {
+        return "oneOf".to_string();
+    }
+    if schema.get("anyOf").is_some() {
+        return "anyOf".to_string();
+    }
+    if schema.get("allOf").is_some() {
+        return "allOf".to_string();
+    }
+    "object".to_string()
+}
+
+fn describe_schema_kind(schema: &Value) -> String {
+    let kind = describe_schema(schema);
+    if kind == "object" {
+        if let Some(enum_values) = schema.get("enum").and_then(Value::as_array) {
+            return format!("enum({})", enum_values.len());
+        }
+    }
+    kind
+}
+
+fn slugify(input: &str) -> String {
+    let mut output = String::new();
+    let mut last_was_dash = false;
+
+    for ch in input.chars() {
+        if ch.is_ascii_alphanumeric() {
+            output.push(ch.to_ascii_lowercase());
+            last_was_dash = false;
+        } else if !last_was_dash {
+            output.push('-');
+            last_was_dash = true;
+        }
+    }
+
+    let trimmed = output.trim_matches('-');
+    if trimmed.is_empty() {
+        "section".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn escape_html(input: &str) -> String {
+    let mut escaped = String::with_capacity(input.len());
+    for ch in input.chars() {
+        match ch {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&#39;"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
+}
+
+struct DocsShellArgs<'a> {
+    page_title: &'a str,
+    page_subtitle: &'a str,
+    sidebar_html: &'a str,
+    content_html: &'a str,
+    toc_html: &'a str,
+    home_active: bool,
+    api_active: bool,
+    cli_active: bool,
+}
+
+fn docs_shell(args: DocsShellArgs<'_>) -> Html<String> {
+    let home_tab = if args.home_active { "active" } else { "" };
+    let api_tab = if args.api_active { "active" } else { "" };
+    let cli_tab = if args.cli_active { "active" } else { "" };
+
+    let html = format!(
         r##"<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>botnet.pub CLI docs</title>
+    <title>botnet.pub docs | {}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
     <style>
-      :root { --bg:#070a11; --panel:#0c1220; --line:#1f2a3c; --text:#e5e7ef; --muted:#9aa6bb; }
-      * { box-sizing:border-box; }
-      body { margin:0; font-family: "SF Pro Text", "Inter", system-ui, sans-serif; color:var(--text); background:var(--bg); }
-      main { max-width:980px; margin:0 auto; padding:2rem 1rem; }
-      .top, .card { border:1px solid var(--line); border-radius:14px; background:var(--panel); padding:1rem; }
-      .top h1 { margin:0; font-size:clamp(1.8rem,4vw,2.5rem); letter-spacing:-0.02em; }
-      .muted { color:var(--muted); line-height:1.55; }
-      .stack { display:grid; gap:.85rem; margin-top:1rem; }
-      table { width:100%; border-collapse:collapse; margin-top:.75rem; }
-      th,td { border:1px solid #24324a; padding:.55rem; text-align:left; font-size:.9rem; vertical-align:top; }
-      th { background:#10192a; }
-      code, pre { font-family:ui-monospace, Menlo, Consolas, monospace; }
-      pre { margin:.75rem 0 0; padding:.85rem; border:1px solid #2b3a56; border-radius:10px; background:#090e18; color:#eef2ff; overflow:auto; }
-      h2 { margin:0; font-size:1rem; }
-      a.back { display:inline-block; margin-bottom:.8rem; color:#93c5fd; text-decoration:none; font-size:.9rem; }
-      .links { margin-top:.8rem; display:flex; gap:.55rem; flex-wrap:wrap; }
-      .links a { color:#c8d6ff; text-decoration:none; border:1px solid #2b3a56; border-radius:999px; padding:.4rem .65rem; font-size:.78rem; font-family:ui-monospace, Menlo, Consolas, monospace; }
+      :root {{
+        --bg: #070a11;
+        --panel: #0f1522;
+        --line: #1f2b3f;
+        --line-soft: #172133;
+        --text: #e6eaf4;
+        --muted: #9aa5b9;
+        --accent: #60a5fa;
+      }}
+      * {{ box-sizing: border-box; }}
+      html, body {{ margin: 0; height: 100%; }}
+      body {{
+        font-family: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(900px 360px at 8% -10%, rgba(56, 189, 248, 0.12), transparent 56%),
+          radial-gradient(700px 280px at 100% 8%, rgba(99, 102, 241, 0.10), transparent 60%),
+          var(--bg);
+      }}
+      .topbar {{
+        height: 64px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 1rem;
+        position: sticky;
+        top: 0;
+        background: rgba(8, 12, 20, 0.86);
+        backdrop-filter: blur(8px);
+        z-index: 10;
+      }}
+      .brand {{
+        font-weight: 700;
+        letter-spacing: 0.03em;
+      }}
+      .tabs {{
+        display: flex;
+        gap: 0.45rem;
+      }}
+      .tabs a {{
+        color: var(--muted);
+        text-decoration: none;
+        border: 1px solid var(--line-soft);
+        border-radius: 999px;
+        padding: 0.35rem 0.62rem;
+        font-size: 0.78rem;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+      }}
+      .tabs a.active {{
+        color: #dbeafe;
+        border-color: #2f4367;
+        background: #111a2b;
+      }}
+      .search {{
+        border: 1px solid var(--line-soft);
+        border-radius: 999px;
+        padding: 0.35rem 0.7rem;
+        color: var(--muted);
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 0.78rem;
+      }}
+      .layout {{
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr) 220px;
+        min-height: calc(100vh - 64px);
+      }}
+      .sidebar {{
+        border-right: 1px solid var(--line);
+        padding: 1rem;
+        background: rgba(10, 15, 24, 0.75);
+      }}
+      .side-group {{ margin-bottom: 1.2rem; }}
+      .side-title {{
+        color: var(--muted);
+        font-size: 0.73rem;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        margin-bottom: 0.45rem;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+      }}
+      .side-link {{
+        display: block;
+        color: #c6cfdf;
+        text-decoration: none;
+        padding: 0.38rem 0.42rem;
+        border-radius: 8px;
+        font-size: 0.9rem;
+      }}
+      .side-link:hover {{ background: #121b2d; }}
+      .side-link.active {{
+        background: #16233a;
+        border: 1px solid #2a4065;
+      }}
+      .content {{
+        padding: 1.2rem 1.4rem 2rem;
+      }}
+      .headline {{
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+        padding: 0.95rem 1rem;
+      }}
+      .headline h1 {{
+        margin: 0;
+        font-size: clamp(1.6rem, 3.4vw, 2.25rem);
+        letter-spacing: -0.02em;
+      }}
+      .headline p {{
+        margin: 0.45rem 0 0;
+        color: var(--muted);
+      }}
+      .doc-section {{
+        margin-top: 1rem;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+        padding: 1rem;
+      }}
+      .doc-section h1,
+      .doc-section h2 {{
+        margin: 0 0 0.55rem;
+      }}
+      .doc-section p {{
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.55;
+      }}
+      .doc-section ol,
+      .doc-section ul {{
+        margin: 0.55rem 0 0;
+        padding-left: 1.2rem;
+        color: var(--muted);
+        line-height: 1.5;
+      }}
+      .doc-section li + li {{
+        margin-top: 0.25rem;
+      }}
+      .doc-grid {{
+        margin-top: 0.7rem;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 0.75rem;
+      }}
+      .mini-card {{
+        border: 1px solid #24324a;
+        border-radius: 10px;
+        padding: 0.8rem;
+        background: #0b111c;
+      }}
+      .mini-card h3 {{ margin: 0; }}
+      .mini-card p {{ margin-top: 0.35rem; font-size: 0.9rem; }}
+      .mini-card a {{
+        display: inline-block;
+        margin-top: 0.55rem;
+        color: #93c5fd;
+        text-decoration: none;
+        font-size: 0.9rem;
+      }}
+      table {{
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 0.6rem;
+      }}
+      th, td {{
+        border: 1px solid #26344c;
+        padding: 0.5rem;
+        text-align: left;
+        vertical-align: top;
+        font-size: 0.9rem;
+      }}
+      th {{ background: #111b2d; }}
+      code, pre {{
+        font-family: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
+      }}
+      pre {{
+        margin: 0.75rem 0 0;
+        border: 1px solid #2a3b5a;
+        border-radius: 10px;
+        background: #090e18;
+        color: #eef2ff;
+        padding: 0.85rem;
+        overflow: auto;
+      }}
+      .toc {{
+        border-left: 1px solid var(--line);
+        padding: 1rem 0.9rem;
+        background: rgba(10, 15, 24, 0.65);
+      }}
+      .toc h3 {{
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.73rem;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+      }}
+      .toc nav {{
+        margin-top: 0.55rem;
+        display: grid;
+        gap: 0.35rem;
+      }}
+      .toc a {{
+        color: #c4cede;
+        text-decoration: none;
+        font-size: 0.87rem;
+      }}
+      .toc a:hover {{ color: #ffffff; }}
+      @media (max-width: 1100px) {{
+        .layout {{ grid-template-columns: 240px minmax(0, 1fr); }}
+        .toc {{ display: none; }}
+      }}
+      @media (max-width: 760px) {{
+        .layout {{ grid-template-columns: 1fr; }}
+        .sidebar {{ border-right: 0; border-bottom: 1px solid var(--line); }}
+        .tabs {{ display: none; }}
+      }}
     </style>
   </head>
   <body>
-    <main>
-      <a class="back" href="/docs">← docs index</a>
-      <section class="top">
-        <h1>CLI Guide</h1>
-        <p class="muted">`botnet` is the command-line client for registry workflows. Use it for key ops, lifecycle updates, and search.</p>
-        <div class="links">
-          <a href="/install.sh">install.sh</a>
-          <a href="/docs/api">api guide</a>
+    <header class="topbar">
+      <div class="brand">botnet.pub docs</div>
+      <nav class="tabs">
+        <a href="/docs" class="{}">home</a>
+        <a href="/docs/api" class="{}">api</a>
+        <a href="/docs/cli" class="{}">cli</a>
+      </nav>
+      <div class="search">search (soon)</div>
+    </header>
+    <main class="layout">
+      <aside class="sidebar">{}</aside>
+      <section class="content">
+        <div class="headline">
+          <h1>{}</h1>
+          <p>{}</p>
         </div>
+        {}
       </section>
-
-      <section class="stack">
-        <article class="card">
-          <h2>Install</h2>
-          <pre><code>curl -fsSL https://botnet.pub/install.sh | sh
-botnet --help</code></pre>
-        </article>
-
-        <article class="card">
-          <h2>Global flags</h2>
-          <table>
-            <thead><tr><th>Flag</th><th>Description</th></tr></thead>
-            <tbody>
-              <tr><td><code>--base-url</code></td><td>API base URL. Default: <code>http://localhost:8080/v1</code></td></tr>
-              <tr><td><code>--key-id</code></td><td>Signing key id used for signed mutation commands.</td></tr>
-              <tr><td><code>--secret-seed-hex</code></td><td>32-byte Ed25519 seed in hex for local signing.</td></tr>
-            </tbody>
-          </table>
-        </article>
-
-        <article class="card">
-          <h2>Commands</h2>
-          <table>
-            <thead><tr><th>Command</th><th>Purpose</th></tr></thead>
-            <tbody>
-              <tr><td><code>register FILE</code></td><td>Create bot from JSON file (signed).</td></tr>
-              <tr><td><code>get BOT_ID</code></td><td>Fetch one bot.</td></tr>
-              <tr><td><code>update BOT_ID FILE</code></td><td>Replace mutable bot fields (signed).</td></tr>
-              <tr><td><code>add-key BOT_ID FILE</code></td><td>Add signing key (signed).</td></tr>
-              <tr><td><code>remove-key BOT_ID KEY_ID --reason ...</code></td><td>Revoke signing key (signed).</td></tr>
-              <tr><td><code>rotate-key BOT_ID FILE</code></td><td>Rotate key in one operation (signed).</td></tr>
-              <tr><td><code>revoke-bot BOT_ID --reason ...</code></td><td>Revoke bot identity (signed).</td></tr>
-              <tr><td><code>publish-attestation SUBJECT_BOT_ID FILE</code></td><td>Publish issuer-signed attestation.</td></tr>
-              <tr><td><code>search --q ... --status ... --limit ...</code></td><td>Search registry.</td></tr>
-              <tr><td><code>nonce</code></td><td>Fetch nonce for anti-replay support.</td></tr>
-            </tbody>
-          </table>
-        </article>
-
-        <article class="card">
-          <h2>Examples</h2>
-          <pre><code># Search
-botnet --base-url https://botnet.pub/v1 search --q assistant --limit 5
-
-# Fetch stats through API
-curl -sSf https://botnet.pub/v1/stats
-
-# Register with local key material
-botnet --base-url https://botnet.pub/v1 \
-  --key-id k1 \
-  --secret-seed-hex 001122... \
-  register bot.json</code></pre>
-        </article>
-      </section>
+      <aside class="toc">
+        <h3>On This Page</h3>
+        <nav>{}</nav>
+      </aside>
     </main>
   </body>
-</html>
-"##,
-    )
+</html>"##,
+        args.page_title,
+        home_tab,
+        api_tab,
+        cli_tab,
+        args.sidebar_html,
+        args.page_title,
+        args.page_subtitle,
+        args.content_html,
+        args.toc_html
+    );
+    Html(html)
 }
 
 async fn openapi_json() -> impl IntoResponse {
@@ -2255,7 +3148,8 @@ mod tests {
             .await
             .expect("body");
         let body = String::from_utf8(bytes.to_vec()).expect("utf8");
-        assert!(body.contains("Botnet Documentation"));
+        assert!(body.contains("Documentation Home"));
+        assert!(body.contains("Generated Coverage"));
         assert!(body.contains("/docs/api"));
     }
 
@@ -2276,8 +3170,10 @@ mod tests {
             .await
             .expect("body");
         let body = String::from_utf8(bytes.to_vec()).expect("utf8");
-        assert!(body.contains("API Guide"));
+        assert!(body.contains("API Reference"));
         assert!(body.contains("/v1/bots"));
+        assert!(body.contains("Schema Catalog"));
+        assert!(body.contains("Operation ID"));
     }
 
     #[tokio::test]
@@ -2297,8 +3193,10 @@ mod tests {
             .await
             .expect("body");
         let body = String::from_utf8(bytes.to_vec()).expect("utf8");
-        assert!(body.contains("CLI Guide"));
+        assert!(body.contains("CLI Reference"));
         assert!(body.contains("botnet --help"));
+        assert!(body.contains("botnet publish-attestation"));
+        assert!(body.contains("metadata from Clap"));
     }
 
     #[tokio::test]
