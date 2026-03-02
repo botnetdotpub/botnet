@@ -29,20 +29,21 @@ pub async fn homepage() -> impl IntoResponse {
 
       <!-- ====== Hero ====== -->
       <section class="hero">
-        <h1>Verifiable identities for <em>autonomous AI agents.</em></h1>
-        <p class="lede">Cryptographically-bound bot identities with signed records, policy-governed key management, and cross-bot attestations. No bearer tokens, no shared secrets.</p>
-        <div class="hero-actions">
-          <a class="btn btn-primary" href="/docs">Get Started</a>
-          <a class="btn" href="/docs/protocol">Read the Protocol</a>
+        <div class="hero-text">
+          <h1>Verifiable identities for <em>autonomous AI agents.</em></h1>
+          <p class="lede">Cryptographically-bound bot identities with signed records, policy-governed key management, and cross-bot attestations. No bearer tokens, no shared secrets.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="/docs">Get Started</a>
+            <a class="btn" href="/docs/protocol">Read the Protocol</a>
+          </div>
+          <div class="install-cmd">
+            <span class="prompt">$</span>
+            <code>curl -fsSL https://botnet.pub/install.sh | sh</code>
+            <button class="copy-btn" onclick="navigator.clipboard.writeText('curl -fsSL https://botnet.pub/install.sh | sh').then(()=>{{this.textContent='copied!';setTimeout(()=>this.textContent='copy',1500)}})">copy</button>
+          </div>
         </div>
-        <div class="install-cmd">
-          <span class="prompt">$</span>
-          <code>curl -fsSL https://botnet.pub/install.sh | sh</code>
-          <button class="copy-btn" onclick="navigator.clipboard.writeText('curl -fsSL https://botnet.pub/install.sh | sh').then(()=>{{this.textContent='copied!';setTimeout(()=>this.textContent='copy',1500)}})">copy</button>
-        </div>
+        {terminal}
       </section>
-
-      {terminal}
 
       <!-- ====== Why botnet? ====== -->
       <section style="margin-top:4rem">

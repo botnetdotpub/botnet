@@ -99,12 +99,14 @@ pub const HOMEPAGE_CSS: &str = r#"
 
       /* ---- Hero ---- */
       .hero {
-        margin-top: 4rem;
-        text-align: center;
-        max-width: 680px;
-        margin-left: auto;
-        margin-right: auto;
+        margin-top: 2rem;
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 2rem;
+        align-items: center;
+        min-height: 420px;
       }
+      .hero-text { max-width: 600px; }
       .hero h1 {
         font-size: clamp(2.4rem, 5vw, 3.8rem);
         font-weight: 700;
@@ -121,14 +123,11 @@ pub const HOMEPAGE_CSS: &str = r#"
         color: var(--muted);
         font-size: 1.08rem;
         line-height: 1.6;
-        max-width: 54ch;
-        margin-left: auto;
-        margin-right: auto;
+        max-width: 48ch;
       }
       .hero-actions {
         margin-top: 1.5rem;
         display: flex; gap: 0.65rem; flex-wrap: wrap; align-items: center;
-        justify-content: center;
       }
       .btn {
         display: inline-flex; align-items: center; gap: 0.4rem;
@@ -181,8 +180,6 @@ pub const HOMEPAGE_CSS: &str = r#"
         border-radius: 14px;
         background: #0a0f18;
         overflow: hidden;
-        max-width: 520px;
-        margin: 2rem auto 0;
       }
       .terminal-head {
         display: flex; align-items: center; justify-content: space-between;
@@ -386,6 +383,8 @@ pub const HOMEPAGE_CSS: &str = r#"
 
       /* ---- Responsive ---- */
       @media (max-width: 1024px) {
+        .hero { grid-template-columns: 1fr; }
+        .hero .terminal { max-width: 500px; }
         .steps { grid-template-columns: repeat(2, 1fr); }
         .grid-3x2 { grid-template-columns: repeat(2, 1fr); }
       }
