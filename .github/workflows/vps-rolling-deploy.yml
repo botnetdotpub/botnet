@@ -92,6 +92,8 @@ jobs:
       - name: Upload bundle via SCP
         run: |
           VPS_PORT="${{ secrets.VPS_PORT }}"
+          ssh $SSH_OPTS -i ~/.ssh_deploy_key -p "${VPS_PORT:-22}" \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "mkdir -p ~/botid-deploy"
           scp $SSH_OPTS -i ~/.ssh_deploy_key -P "${VPS_PORT:-22}" \
             dist/* \
             "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:~/botid-deploy/"
