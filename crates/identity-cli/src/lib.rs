@@ -28,8 +28,11 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    #[command(about = "Create a bot from a JSON file (signed)")]
-    Register { file: String },
+    #[command(about = "Register a bot interactively or from a JSON file (signed)")]
+    Register {
+        #[arg(help = "Path to a bot JSON file (omit for interactive mode)")]
+        file: Option<String>,
+    },
     #[command(about = "Fetch a bot by ID")]
     Get { bot_id: String },
     #[command(about = "Update a bot from a JSON file (signed)")]
@@ -148,12 +151,17 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
     let client = Client::new(base_url);
 
     match command {
-        Commands::Register { file } => {
-            let signer = required_signer(key_id.as_deref(), secret_seed_hex.as_deref())?;
-            let record: BotRecord = read_json(&file)?;
-            let created = client.create_bot(record, &signer).await?;
-            println!("{}", serde_json::to_string_pretty(&created)?);
-        }
+        Commands::Register { file } => match file {
+            Some(path) => {
+                let signer = required_signer(key_id.as_deref(), secret_seed_hex.as_deref())?;
+                let record: BotRecord = read_json(&path)?;
+                let created = client.create_bot(record, &signer).await?;
+                println!("{}", serde_json::to_string_pretty(&created)?);
+            }
+            None => {
+                interactive_register(&client).await?;
+            }
+        },
         Commands::Get { bot_id } => {
             let bot = client.get_bot(&bot_id).await?;
             println!("{}", serde_json::to_string_pretty(&bot)?);
@@ -229,6 +237,86 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             );
         }
     }
+
+    Ok(())
+}
+
+fn prompt(label: &str, default: &str) -> anyhow::Result<String> {
+    if default.is_empty() {
+        eprint!("{}: ", label);
+    } else {
+        eprint!("{} [{}]: ", label, default);
+    }
+    let mut buf = String::new();
+    std::io::stdin().read_line(&mut buf).context("read stdin")?;
+    let trimmed = buf.trim();
+    if trimmed.is_empty() {
+        Ok(default.to_string())
+    } else {
+        Ok(trimmed.to_string())
+    }
+}
+
+async fn interactive_register(client: &Client) -> anyhow::Result<()> {
+    let signing_key = identity_crypto::keys::generate_ed25519();
+    let pub_bytes = signing_key.verifying_key().to_bytes();
+    let public_key_multibase = multibase::encode(multibase::Base::Base58Btc, pub_bytes);
+    let key_id = format!("key-{}", &hex::encode(pub_bytes)[..8]);
+    let seed_hex = hex::encode(signing_key.to_bytes());
+
+    let display_name = prompt("Display name", "My Bot")?;
+    let description = prompt("Description", "")?;
+
+    let public_key = PublicKey {
+        key_id: key_id.clone(),
+        algorithm: "Ed25519".to_string(),
+        public_key_multibase,
+        purpose: vec!["signing".to_string()],
+        valid_from: None,
+        valid_to: None,
+        revoked_at: None,
+        revocation_reason: None,
+        primary: Some(true),
+        origin: None,
+    };
+
+    let record = BotRecord {
+        bot_id: None,
+        version: None,
+        status: BotStatus::Active,
+        display_name: Some(display_name),
+        description: if description.is_empty() {
+            None
+        } else {
+            Some(description)
+        },
+        owner: None,
+        public_keys: vec![public_key],
+        endpoints: None,
+        capabilities: None,
+        controllers: None,
+        parent_bot_id: None,
+        policy: None,
+        attestations: None,
+        evidence: None,
+        created_at: None,
+        updated_at: None,
+        proof: None,
+        proof_set: None,
+    };
+
+    let seed_bytes = signing_key.to_bytes();
+    let signer = LocalEd25519Signer::from_seed_bytes(&key_id, seed_bytes.as_slice())?;
+    let created = client.create_bot(record, &signer).await?;
+
+    eprintln!();
+    eprintln!("--- credentials (save these, the secret cannot be recovered) ---");
+    eprintln!("key-id:          {}", key_id);
+    eprintln!("secret-seed-hex: {}", seed_hex);
+    eprintln!("----------------------------------------------------------------");
+    eprintln!();
+
+    println!("{}", serde_json::to_string_pretty(&created)?);
 
     Ok(())
 }
@@ -315,7 +403,17 @@ mod tests {
         assert_eq!(cli.base_url, "http://localhost:8080/v1");
         assert_eq!(cli.key_id.as_deref(), Some("k1"));
         match cli.command {
-            Commands::Register { file } => assert_eq!(file, "bot.json"),
+            Commands::Register { file } => assert_eq!(file.as_deref(), Some("bot.json")),
+            _ => panic!("expected register command"),
+        }
+    }
+
+    #[test]
+    fn parses_register_command_without_file() {
+        let cli = Cli::parse_from(["botnet", "register"]);
+
+        match cli.command {
+            Commands::Register { file } => assert!(file.is_none()),
             _ => panic!("expected register command"),
         }
     }
