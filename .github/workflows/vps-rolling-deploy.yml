@@ -24,6 +24,18 @@ jobs:
       CARGO_PROFILE_RELEASE_DEBUG: 0
 
     steps:
+      - name: Validate required secrets
+        run: |
+          missing=()
+          [ -z "${{ secrets.VPS_HOST }}" ] && missing+=("VPS_HOST")
+          [ -z "${{ secrets.VPS_USER }}" ] && missing+=("VPS_USER")
+          [ -z "${{ secrets.VPS_SSH_KEY }}" ] && missing+=("VPS_SSH_KEY")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            exit 1
+          fi
+          echo "All required secrets are configured"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -68,40 +80,43 @@ jobs:
           cp deploy/env/b.env dist/b.env
           cp scripts/remote_rolling_deploy.sh dist/remote_rolling_deploy.sh
           chmod +x dist/remote_rolling_deploy.sh
+          echo "Bundle contents:"
+          ls -lh dist/
 
-      - name: Upload bundle via SCP
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
-          port: ${{ secrets.VPS_PORT || '22' }}
-          source: "dist/*"
-          target: "~/botid-deploy"
-          strip_components: 1
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p ${{ secrets.VPS_PORT || '22' }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Upload bundle via rsync
+        run: |
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key -p ${{ secrets.VPS_PORT || '22' }}" \
+            dist/ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:~/botid-deploy/
 
       - name: Install config + rolling restart via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
-          port: ${{ secrets.VPS_PORT || '22' }}
-          script: |
-            set -euo pipefail
-            DEPLOY_DIR="$HOME/botid-deploy"
+        run: |
+          ssh -i ~/.ssh/deploy_key -p ${{ secrets.VPS_PORT || '22' }} \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash -s <<'DEPLOY'
+          set -euo pipefail
+          DEPLOY_DIR="$HOME/botid-deploy"
 
-            sudo install -Dm644 "$DEPLOY_DIR/identity-registry@.service" /etc/systemd/system/identity-registry@.service
-            sudo install -Dm644 "$DEPLOY_DIR/a.env" /etc/identity-registry/a.env
-            sudo install -Dm644 "$DEPLOY_DIR/b.env" /etc/identity-registry/b.env
-            sudo install -Dm755 "$DEPLOY_DIR/remote_rolling_deploy.sh" /usr/local/bin/remote_rolling_deploy.sh
-            sudo mkdir -p /opt/botid
-            sudo chown -R www-data:www-data /opt/botid
+          sudo install -Dm644 "$DEPLOY_DIR/identity-registry@.service" /etc/systemd/system/identity-registry@.service
+          sudo install -Dm644 "$DEPLOY_DIR/a.env" /etc/identity-registry/a.env
+          sudo install -Dm644 "$DEPLOY_DIR/b.env" /etc/identity-registry/b.env
+          sudo install -Dm755 "$DEPLOY_DIR/remote_rolling_deploy.sh" /usr/local/bin/remote_rolling_deploy.sh
+          sudo mkdir -p /opt/botid
+          sudo chown -R www-data:www-data /opt/botid
 
-            sudo systemctl daemon-reload
-            sudo systemctl enable identity-registry@a identity-registry@b
-            /usr/local/bin/remote_rolling_deploy.sh "$DEPLOY_DIR/identity-server"
+          sudo systemctl daemon-reload
+          sudo systemctl enable identity-registry@a identity-registry@b
+          /usr/local/bin/remote_rolling_deploy.sh "$DEPLOY_DIR/identity-server"
 
-            rm -rf "$DEPLOY_DIR"
+          rm -rf "$DEPLOY_DIR"
+          DEPLOY
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
