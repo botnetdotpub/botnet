@@ -89,17 +89,23 @@ jobs:
           echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -p ${{ secrets.VPS_PORT || '22' }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          cat > ~/.ssh/config <<EOF
+          Host deploy-target
+            HostName ${{ secrets.VPS_HOST }}
+            User ${{ secrets.VPS_USER }}
+            Port ${{ secrets.VPS_PORT || '22' }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking accept-new
+          EOF
 
-      - name: Upload bundle via rsync
+      - name: Upload bundle via SCP
         run: |
-          rsync -avz --delete \
-            -e "ssh -i ~/.ssh/deploy_key -p ${{ secrets.VPS_PORT || '22' }}" \
-            dist/ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:~/botid-deploy/
+          ssh deploy-target "mkdir -p ~/botid-deploy"
+          scp dist/* deploy-target:~/botid-deploy/
 
       - name: Install config + rolling restart via SSH
         run: |
-          ssh -i ~/.ssh/deploy_key -p ${{ secrets.VPS_PORT || '22' }} \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash -s <<'DEPLOY'
+          ssh deploy-target bash -s <<'DEPLOY'
           set -euo pipefail
           DEPLOY_DIR="$HOME/botid-deploy"
 
@@ -119,4 +125,4 @@ jobs:
 
       - name: Cleanup SSH key
         if: always()
-        run: rm -f ~/.ssh/deploy_key
+        run: rm -f ~/.ssh/deploy_key ~/.ssh/config
