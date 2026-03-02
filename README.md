@@ -36,13 +36,13 @@ cargo run -p identity-cli -- --help
 Install CLI from GitHub Releases (after first `botnet-v*` release is published):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet.pub/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet/main/install.sh | sh
 ```
 
 Pin a version:
 
 ```bash
-BOTNET_VERSION=botnet-v0.1.0 curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet.pub/main/install.sh | sh
+BOTNET_VERSION=botnet-v0.1.0 curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet/main/install.sh | sh
 ```
 
 ## Common commands

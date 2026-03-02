@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-REPO="botnetdotpub/botnet.pub"
+REPO="botnetdotpub/botnet"
 APP="botnet"
 VERSION="${BOTNET_VERSION:-latest}"
 

@@ -88,7 +88,7 @@ jobs:
           generate_release_notes: true
           body: |
             Install:
-            curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet.pub/main/install.sh | sh
+            curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet/main/install.sh | sh
 
             Pin a version:
-            BOTNET_VERSION=${{ github.ref_name }} curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet.pub/main/install.sh | sh
+            BOTNET_VERSION=${{ github.ref_name }} curl -fsSL https://raw.githubusercontent.com/botnetdotpub/botnet/main/install.sh | sh

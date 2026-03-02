@@ -18,6 +18,10 @@ use identity_storage::{MemoryStore, SqliteStore, Storage};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashSet, net::SocketAddr, sync::Arc};
+
+/// GitHub repository slug used in homepage and install links.
+/// Change this if the repo moves to a different org or name.
+const GITHUB_REPO: &str = "botnetdotpub/botnet";
 use tower_http::trace::TraceLayer;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
@@ -668,7 +672,7 @@ async fn homepage() -> impl IntoResponse {
           <a href="#quickstart">quickstart</a>
           <a href="/docs">docs</a>
           <a href="/swagger">swagger</a>
-          <a class="github-btn" href="https://github.com/botnetdotpub/botnet.pub" target="_blank" rel="noreferrer">github</a>
+          <a class="github-btn" href="https://github.com/GITHUB_REPO_PLACEHOLDER" target="_blank" rel="noreferrer">github</a>
         </nav>
       </header>
 
@@ -799,7 +803,8 @@ async fn homepage() -> impl IntoResponse {
     </script>
   </body>
 </html>
-"##,
+"##
+        .replace("GITHUB_REPO_PLACEHOLDER", GITHUB_REPO),
     )
 }
 
