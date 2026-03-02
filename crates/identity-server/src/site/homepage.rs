@@ -29,55 +29,42 @@ pub async fn homepage() -> impl IntoResponse {
 
       <!-- ====== Hero ====== -->
       <section class="hero">
-        <div class="hero-text">
-          <div class="eyebrow">Open Protocol + Public Registry</div>
-          <h1>Verifiable identities for <em>autonomous AI agents.</em></h1>
-          <p class="lede">Cryptographically-bound bot identities with signed records, policy-governed key management, and cross-bot attestations. No bearer tokens, no shared secrets.</p>
-          <div class="hero-actions">
-            <a class="btn btn-primary" href="/docs">Get Started</a>
-            <a class="btn" href="/docs/protocol">Read the Protocol</a>
-          </div>
-          <div class="install-cmd">
-            <span class="prompt">$</span>
-            <code>curl -fsSL https://botnet.pub/install.sh | sh</code>
-            <button class="copy-btn" onclick="navigator.clipboard.writeText('curl -fsSL https://botnet.pub/install.sh | sh').then(()=>{{this.textContent='copied!';setTimeout(()=>this.textContent='copy',1500)}})">copy</button>
-          </div>
+        <h1>Verifiable identities for <em>autonomous AI agents.</em></h1>
+        <p class="lede">Cryptographically-bound bot identities with signed records, policy-governed key management, and cross-bot attestations. No bearer tokens, no shared secrets.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="/docs">Get Started</a>
+          <a class="btn" href="/docs/protocol">Read the Protocol</a>
         </div>
-        {terminal}
+        <div class="install-cmd">
+          <span class="prompt">$</span>
+          <code>curl -fsSL https://botnet.pub/install.sh | sh</code>
+          <button class="copy-btn" onclick="navigator.clipboard.writeText('curl -fsSL https://botnet.pub/install.sh | sh').then(()=>{{this.textContent='copied!';setTimeout(()=>this.textContent='copy',1500)}})">copy</button>
+        </div>
       </section>
 
-      <!-- ====== Stats ====== -->
-      <section class="stats-bar">
-        <article class="metric"><div class="k">Total Bots</div><div id="total_bots" class="v">-</div></article>
-        <article class="metric"><div class="k">Active</div><div id="active_bots" class="v">-</div></article>
-        <article class="metric"><div class="k">Revoked</div><div id="revoked_bots" class="v">-</div></article>
-        <article class="metric"><div class="k">Active Keys</div><div id="active_keys" class="v">-</div></article>
-        <article class="metric"><div class="k">Revoked Keys</div><div id="revoked_keys" class="v">-</div></article>
-        <article class="metric"><div class="k">Attestations</div><div id="total_attestations" class="v">-</div></article>
-      </section>
+      {terminal}
 
       <!-- ====== Why botnet? ====== -->
       <section style="margin-top:4rem">
-        <div class="section-label">The Problem</div>
         <h2 class="section-heading">Why botnet?</h2>
         <p class="section-sub">AI agents are proliferating &mdash; sending emails, writing code, managing infrastructure, talking to each other. But there is no standard way to answer basic questions about them.</p>
         <div class="grid-2x2" style="margin-top:1.5rem">
-          <div class="card card-cyan">
+          <div class="card">
             <div class="card-icon">?</div>
             <h3>Who operates this bot?</h3>
             <p>No verifiable link between a bot and its owner. Anyone can claim to run any agent.</p>
           </div>
-          <div class="card card-green">
+          <div class="card">
             <div class="card-icon">?</div>
             <h3>Is this bot still active?</h3>
             <p>No lifecycle management or revocation. Decommissioned bots remain indistinguishable from live ones.</p>
           </div>
-          <div class="card card-blue">
+          <div class="card">
             <div class="card-icon">?</div>
             <h3>Can it do what it claims?</h3>
             <p>No capability declarations or third-party attestations. Trust is implicit, not verifiable.</p>
           </div>
-          <div class="card card-purple">
+          <div class="card">
             <div class="card-icon">?</div>
             <h3>Who authorized this action?</h3>
             <p>No cryptographic proof chain. Actions happen without auditable authorization trails.</p>
@@ -87,36 +74,35 @@ pub async fn homepage() -> impl IntoResponse {
 
       <!-- ====== Core Concepts ====== -->
       <section style="margin-top:4rem">
-        <div class="section-label">Primitives</div>
         <h2 class="section-heading">Core Concepts</h2>
         <p class="section-sub">Six building blocks for verifiable bot identity.</p>
         <div class="grid-3x2" style="margin-top:1.5rem">
-          <div class="card card-cyan">
+          <div class="card">
             <div class="card-icon">#</div>
             <h3>Bot ID</h3>
             <p>A deterministic identifier derived from a public key: <code>urn:bot:sha256:{{hex}}</code>. Same key, same ID. No central authority.</p>
           </div>
-          <div class="card card-green">
+          <div class="card">
             <div class="card-icon">&curren;</div>
             <h3>Bot Record</h3>
             <p>The identity document: public keys, owner info, capabilities, endpoints, controllers, and lifecycle status.</p>
           </div>
-          <div class="card card-blue">
+          <div class="card">
             <div class="card-icon">&check;</div>
             <h3>Proof</h3>
             <p>Every mutation includes a JWS signature over JCS-canonicalized payload. Ed25519 verified before any change.</p>
           </div>
-          <div class="card card-purple">
+          <div class="card">
             <div class="card-icon">&amp;</div>
             <h3>Policy</h3>
             <p>Optional m-of-n threshold rules per operation. Require 2-of-3 signers to rotate a key or 3-of-5 to revoke.</p>
           </div>
-          <div class="card card-red">
+          <div class="card">
             <div class="card-icon">&starf;</div>
             <h3>Attestation</h3>
             <p>A signed statement one bot makes about another. First-class objects with issuer verification and expiration.</p>
           </div>
-          <div class="card card-yellow">
+          <div class="card">
             <div class="card-icon">&rArr;</div>
             <h3>Controller</h3>
             <p>Bot-to-bot delegation. A controller bot can manage keys or updates for another, enabling hierarchical trust.</p>
@@ -126,7 +112,6 @@ pub async fn homepage() -> impl IntoResponse {
 
       <!-- ====== How It Works ====== -->
       <section style="margin-top:4rem">
-        <div class="section-label">Workflow</div>
         <h2 class="section-heading">How It Works</h2>
         <p class="section-sub">From key generation to attestation in four steps.</p>
         <div class="steps" style="margin-top:1.5rem">
@@ -159,7 +144,6 @@ pub async fn homepage() -> impl IntoResponse {
 
       <!-- ====== API Quick Reference ====== -->
       <section style="margin-top:4rem">
-        <div class="section-label">Endpoints</div>
         <h2 class="section-heading">API Quick Reference</h2>
         <p class="section-sub">All endpoints at <code>https://botnet.pub/v1</code>. <a href="/docs/api" style="color:var(--cyan);text-decoration:none">Full reference &rarr;</a></p>
         <div style="margin-top:1rem;border:1px solid var(--line);border-radius:12px;overflow:hidden">

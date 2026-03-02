@@ -48,10 +48,7 @@ pub const RESET: &str = r#"
 pub const HOMEPAGE_CSS: &str = r#"
       body {
         font-family: "Space Grotesk", "Manrope", "Avenir Next", "Segoe UI", sans-serif;
-        background:
-          radial-gradient(900px 400px at 8% 0%, rgba(34,211,238,0.07), transparent 58%),
-          radial-gradient(700px 320px at 92% 18%, rgba(99,102,241,0.06), transparent 60%),
-          linear-gradient(180deg, #05070b 0%, #06080d 100%);
+        background: var(--bg);
       }
 
       /* ---- Nav ---- */
@@ -102,35 +99,13 @@ pub const HOMEPAGE_CSS: &str = r#"
 
       /* ---- Hero ---- */
       .hero {
-        margin-top: 2rem;
-        display: grid;
-        grid-template-columns: 1.15fr 0.85fr;
-        gap: 2rem;
-        align-items: center;
-        min-height: 420px;
-      }
-      .hero-text { max-width: 600px; }
-      .eyebrow {
-        display: inline-flex; align-items: center; gap: 0.5rem;
-        padding: 0.38rem 0.85rem;
-        border-radius: 999px;
-        border: 1px solid rgba(34,211,238,0.2);
-        background: rgba(34,211,238,0.06);
-        font-size: 0.72rem;
-        font-family: "IBM Plex Mono", monospace;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: var(--cyan);
-      }
-      .eyebrow::before {
-        content: "";
-        width: 7px; height: 7px;
-        border-radius: 50%;
-        background: var(--green);
-        box-shadow: 0 0 10px rgba(34,197,94,0.6);
+        margin-top: 4rem;
+        text-align: center;
+        max-width: 680px;
+        margin-left: auto;
+        margin-right: auto;
       }
       .hero h1 {
-        margin-top: 1.1rem;
         font-size: clamp(2.4rem, 5vw, 3.8rem);
         font-weight: 700;
         line-height: 1.06;
@@ -139,21 +114,21 @@ pub const HOMEPAGE_CSS: &str = r#"
       }
       .hero h1 em {
         font-style: normal;
-        background: linear-gradient(135deg, var(--cyan), var(--blue));
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+        color: var(--cyan);
       }
       .lede {
         margin-top: 1.1rem;
-        color: #b0bcd0;
+        color: var(--muted);
         font-size: 1.08rem;
         line-height: 1.6;
-        max-width: 48ch;
+        max-width: 54ch;
+        margin-left: auto;
+        margin-right: auto;
       }
       .hero-actions {
         margin-top: 1.5rem;
         display: flex; gap: 0.65rem; flex-wrap: wrap; align-items: center;
+        justify-content: center;
       }
       .btn {
         display: inline-flex; align-items: center; gap: 0.4rem;
@@ -168,13 +143,13 @@ pub const HOMEPAGE_CSS: &str = r#"
       }
       .btn:hover { border-color: #475569; color: #f8fafc; }
       .btn-primary {
-        background: linear-gradient(135deg, rgba(34,211,238,0.15), rgba(96,165,250,0.15));
-        border-color: rgba(34,211,238,0.3);
+        background: rgba(34,211,238,0.06);
+        border-color: rgba(34,211,238,0.25);
         color: #e0f2fe;
       }
       .btn-primary:hover {
-        background: linear-gradient(135deg, rgba(34,211,238,0.22), rgba(96,165,250,0.22));
-        border-color: rgba(34,211,238,0.5);
+        background: rgba(34,211,238,0.1);
+        border-color: rgba(34,211,238,0.4);
       }
 
       /* ---- Install command ---- */
@@ -206,7 +181,8 @@ pub const HOMEPAGE_CSS: &str = r#"
         border-radius: 14px;
         background: #0a0f18;
         overflow: hidden;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03);
+        max-width: 520px;
+        margin: 2rem auto 0;
       }
       .terminal-head {
         display: flex; align-items: center; justify-content: space-between;
@@ -240,52 +216,8 @@ pub const HOMEPAGE_CSS: &str = r#"
       .good { color: #33d17a; }
       .warn { color: #f97316; }
 
-      /* ---- Stats bar ---- */
-      .stats-bar {
-        margin-top: 2.5rem;
-        border: 1px solid var(--line);
-        border-radius: 14px;
-        overflow: hidden;
-        display: grid;
-        grid-template-columns: repeat(6, minmax(0, 1fr));
-      }
-      .metric {
-        padding: 1rem;
-        border-right: 1px solid var(--line);
-        background: linear-gradient(180deg, rgba(14,19,29,0.9), rgba(10,15,24,0.9));
-        text-align: center;
-      }
-      .metric:last-child { border-right: 0; }
-      .metric .k {
-        color: var(--mono);
-        font-family: "IBM Plex Mono", monospace;
-        text-transform: uppercase;
-        font-size: 0.63rem;
-        letter-spacing: 0.13em;
-      }
-      .metric .v {
-        margin-top: 0.4rem;
-        font-size: clamp(1.2rem, 2vw, 1.65rem);
-        font-weight: 700;
-        letter-spacing: -0.02em;
-      }
-      .metric:nth-child(1) .v { color: var(--blue); }
-      .metric:nth-child(2) .v { color: var(--green); }
-      .metric:nth-child(3) .v { color: var(--red); }
-      .metric:nth-child(4) .v { color: var(--cyan); }
-      .metric:nth-child(5) .v { color: #fda4af; }
-      .metric:nth-child(6) .v { color: var(--purple); }
-
       /* ---- Section headings ---- */
-      .section-label {
-        font-family: "IBM Plex Mono", monospace;
-        font-size: 0.72rem;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-        color: var(--cyan);
-      }
       .section-heading {
-        margin-top: 0.4rem;
         font-size: clamp(1.5rem, 3vw, 2.2rem);
         font-weight: 700;
         letter-spacing: -0.02em;
@@ -326,6 +258,7 @@ pub const HOMEPAGE_CSS: &str = r#"
         margin-bottom: 0.75rem;
         border: 1px solid var(--line-2);
         background: rgba(255,255,255,0.03);
+        color: var(--muted);
       }
       .card h3 {
         font-size: 1rem;
@@ -338,12 +271,6 @@ pub const HOMEPAGE_CSS: &str = r#"
         font-size: 0.88rem;
         line-height: 1.55;
       }
-      .card-cyan .card-icon { border-color: rgba(34,211,238,0.3); color: var(--cyan); background: rgba(34,211,238,0.08); }
-      .card-green .card-icon { border-color: rgba(34,197,94,0.3); color: var(--green); background: rgba(34,197,94,0.08); }
-      .card-blue .card-icon { border-color: rgba(96,165,250,0.3); color: var(--blue); background: rgba(96,165,250,0.08); }
-      .card-purple .card-icon { border-color: rgba(167,139,250,0.3); color: var(--purple); background: rgba(167,139,250,0.08); }
-      .card-red .card-icon { border-color: rgba(251,113,133,0.3); color: var(--red); background: rgba(251,113,133,0.08); }
-      .card-yellow .card-icon { border-color: rgba(251,191,36,0.3); color: var(--yellow); background: rgba(251,191,36,0.08); }
 
       /* ---- Steps ---- */
       .steps {
@@ -368,9 +295,9 @@ pub const HOMEPAGE_CSS: &str = r#"
         font-weight: 700;
         font-family: "IBM Plex Mono", monospace;
         margin-bottom: 0.75rem;
-        border: 1px solid rgba(34,211,238,0.3);
-        background: rgba(34,211,238,0.08);
-        color: var(--cyan);
+        border: 1px solid var(--line-2);
+        background: rgba(255,255,255,0.03);
+        color: #f1f5f9;
       }
       .step h3 { font-size: 0.95rem; font-weight: 600; color: #f1f5f9; margin-bottom: 0.35rem; }
       .step p { color: var(--muted); font-size: 0.85rem; line-height: 1.5; }
@@ -459,22 +386,16 @@ pub const HOMEPAGE_CSS: &str = r#"
 
       /* ---- Responsive ---- */
       @media (max-width: 1024px) {
-        .hero { grid-template-columns: 1fr; }
-        .hero .terminal { max-width: 500px; }
         .steps { grid-template-columns: repeat(2, 1fr); }
         .grid-3x2 { grid-template-columns: repeat(2, 1fr); }
       }
       @media (max-width: 768px) {
         .nav-links a:not(.github-btn) { display: none; }
-        .stats-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         .grid-2x2 { grid-template-columns: 1fr; }
         .grid-3x2 { grid-template-columns: 1fr; }
         .steps { grid-template-columns: 1fr; }
         .footer-grid { grid-template-columns: 1fr; gap: 1.5rem; }
         .hero h1 { font-size: 2.2rem; }
-      }
-      @media (max-width: 480px) {
-        .stats-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       }
 "#;
 
