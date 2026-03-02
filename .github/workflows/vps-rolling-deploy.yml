@@ -22,6 +22,7 @@ jobs:
     env:
       CARGO_INCREMENTAL: 0
       CARGO_PROFILE_RELEASE_DEBUG: 0
+      SSH_OPTS: -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR
 
     steps:
       - name: Validate required secrets
@@ -83,50 +84,43 @@ jobs:
           echo "Bundle contents:"
           ls -lh dist/
 
-      - name: Upload bundle and deploy
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || '22' }}
-          script_stop: true
-          script: |
-            set -euo pipefail
-            echo "Connected to $(hostname), ready for deploy"
-
-      - name: Transfer files via tar over SSH
+      - name: Setup SSH key
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p ${{ secrets.VPS_PORT || '22' }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
-          tar -czf - -C dist . | ssh -i ~/.ssh/deploy_key -p ${{ secrets.VPS_PORT || '22' }} -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "mkdir -p ~/botid-deploy && tar -xzf - -C ~/botid-deploy"
-          rm -f ~/.ssh/deploy_key
+          install -m 600 /dev/null ~/.ssh_deploy_key
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh_deploy_key
 
-      - name: Install config + rolling restart via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || '22' }}
-          script_stop: true
-          script: |
-            set -euo pipefail
-            DEPLOY_DIR="$HOME/botid-deploy"
+      - name: Upload bundle via SCP
+        run: |
+          VPS_PORT="${{ secrets.VPS_PORT }}"
+          scp $SSH_OPTS -i ~/.ssh_deploy_key -P "${VPS_PORT:-22}" \
+            dist/* \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:~/botid-deploy/"
 
-            ls -lh "$DEPLOY_DIR/"
+      - name: Install config + rolling restart
+        run: |
+          VPS_PORT="${{ secrets.VPS_PORT }}"
+          ssh $SSH_OPTS -i ~/.ssh_deploy_key -p "${VPS_PORT:-22}" \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" bash <<'REMOTE'
+          set -euo pipefail
+          DEPLOY_DIR="$HOME/botid-deploy"
 
-            sudo install -Dm644 "$DEPLOY_DIR/identity-registry@.service" /etc/systemd/system/identity-registry@.service
-            sudo install -Dm644 "$DEPLOY_DIR/a.env" /etc/identity-registry/a.env
-            sudo install -Dm644 "$DEPLOY_DIR/b.env" /etc/identity-registry/b.env
-            sudo install -Dm755 "$DEPLOY_DIR/remote_rolling_deploy.sh" /usr/local/bin/remote_rolling_deploy.sh
-            sudo mkdir -p /opt/botid
-            sudo chown -R www-data:www-data /opt/botid
+          echo "Deployed files:"
+          ls -lh "$DEPLOY_DIR/"
 
-            sudo systemctl daemon-reload
-            sudo systemctl enable identity-registry@a identity-registry@b
-            /usr/local/bin/remote_rolling_deploy.sh "$DEPLOY_DIR/identity-server"
+          sudo install -Dm644 "$DEPLOY_DIR/identity-registry@.service" /etc/systemd/system/identity-registry@.service
+          sudo install -Dm644 "$DEPLOY_DIR/a.env" /etc/identity-registry/a.env
+          sudo install -Dm644 "$DEPLOY_DIR/b.env" /etc/identity-registry/b.env
+          sudo install -Dm755 "$DEPLOY_DIR/remote_rolling_deploy.sh" /usr/local/bin/remote_rolling_deploy.sh
+          sudo mkdir -p /opt/botid
+          sudo chown -R www-data:www-data /opt/botid
 
-            rm -rf "$DEPLOY_DIR"
+          sudo systemctl daemon-reload
+          sudo systemctl enable identity-registry@a identity-registry@b
+          /usr/local/bin/remote_rolling_deploy.sh "$DEPLOY_DIR/identity-server"
+
+          rm -rf "$DEPLOY_DIR"
+          REMOTE
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh_deploy_key
