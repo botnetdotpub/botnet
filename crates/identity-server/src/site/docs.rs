@@ -172,9 +172,7 @@ fn sidebar_section(title: &str, links: &[(&str, &str, bool)], open: bool) -> Str
             r##"<a href="{href}" class="side-link{cls}">{label}</a>"##
         ));
     }
-    format!(
-        r##"<details{open_attr}><summary>{title}</summary>{link_html}</details>"##
-    )
+    format!(r##"<details{open_attr}><summary>{title}</summary>{link_html}</details>"##)
 }
 
 // ---------------------------------------------------------------------------
@@ -418,15 +416,18 @@ pub async fn docs_protocol() -> impl IntoResponse {
         </section>
         "##,
         bot_id_code = code_block("urn:bot:sha256:{hex(SHA-256(pk))}"),
-        single_proof_code = code_block(r#"{
+        single_proof_code = code_block(
+            r#"{
   "proof": {
     "algorithm": "Ed25519",
     "key_id": "k1",
     "created": "2026-02-15T00:00:00Z",
     "jws": "<detached-jws>"
   }
-}"#),
-        multi_proof_code = code_block(r#"{
+}"#
+        ),
+        multi_proof_code = code_block(
+            r#"{
   "proof_set": [
     {
       "algorithm": "Ed25519",
@@ -441,8 +442,10 @@ pub async fn docs_protocol() -> impl IntoResponse {
       "jws": "<detached-jws-2>"
     }
   ]
-}"#),
-        policy_code = code_block(r#"{
+}"#
+        ),
+        policy_code = code_block(
+            r#"{
   "policy": {
     "rules": [
       {
@@ -455,8 +458,10 @@ pub async fn docs_protocol() -> impl IntoResponse {
       }
     ]
   }
-}"#),
-        auth_flow_code = code_block(r#"Client                                  Registry
+}"#
+        ),
+        auth_flow_code = code_block(
+            r#"Client                                  Registry
   |                                        |
   |  1. GET /v1/nonce                      |
   |--------------------------------------->|
@@ -473,7 +478,8 @@ pub async fn docs_protocol() -> impl IntoResponse {
   |     7. Verify JWS against bot's keys   |
   |     8. Check nonce (anti-replay)       |
   |     9. Evaluate policy thresholds      |
-  |<--- 201 Created                        |"#),
+  |<--- 201 Created                        |"#
+        ),
     );
 
     let toc_html = r##"
@@ -581,7 +587,9 @@ pub async fn docs_api() -> impl IntoResponse {
             ));
         }
         if parameter_rows.is_empty() {
-            parameter_rows.push_str(r#"<tr><td colspan="5" style="color:var(--mono)">No parameters.</td></tr>"#);
+            parameter_rows.push_str(
+                r#"<tr><td colspan="5" style="color:var(--mono)">No parameters.</td></tr>"#,
+            );
         }
 
         let mut response_rows = String::new();
@@ -706,15 +714,18 @@ pub async fn docs_api() -> impl IntoResponse {
           </table>
         </section>
         "##,
-        auth_code = code_block(r#"{
+        auth_code = code_block(
+            r#"{
   "proof": {
     "algorithm": "Ed25519",
     "key_id": "k1",
     "created": "2026-02-15T00:00:00Z",
     "jws": "<detached-jws>"
   }
-}"#),
-        read_code = code_block(r#"# service metadata
+}"#
+        ),
+        read_code = code_block(
+            r#"# service metadata
 curl -sSf https://botnet.pub/v1
 
 # health
@@ -727,8 +738,10 @@ curl -sSf https://botnet.pub/v1/stats
 curl -sSf "https://botnet.pub/v1/search?q=assistant&limit=5"
 
 # fetch by id
-curl -sSf https://botnet.pub/v1/bots/<BOT_ID>"#),
-        mutation_code = code_block(r#"# create bot (signed payload)
+curl -sSf https://botnet.pub/v1/bots/<BOT_ID>"#
+        ),
+        mutation_code = code_block(
+            r#"# create bot (signed payload)
 curl -sSf -X POST https://botnet.pub/v1/bots \
   -H "content-type: application/json" \
   --data @signed-bot-record.json
@@ -741,7 +754,8 @@ curl -sSf -X POST https://botnet.pub/v1/bots/<BOT_ID>/keys \
 # revoke bot (signed payload)
 curl -sSf -X POST https://botnet.pub/v1/bots/<BOT_ID>/revoke \
   -H "content-type: application/json" \
-  --data @signed-revoke.json"#),
+  --data @signed-revoke.json"#
+        ),
         matrix = matrix_rows,
         details = detail_sections,
         schemas = schema_rows,
