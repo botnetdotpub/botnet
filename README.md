@@ -45,7 +45,13 @@ BOTNET_VERSION=botnet-v0.1.0 curl -fsSL https://botnet.pub/install.sh | sh
 
 ## Quick start
 
-Register a bot identity:
+Register a bot identity interactively (generates keys, prompts for name/description):
+
+```sh
+botnet --base-url https://botnet.pub/v1 register
+```
+
+Or register from a JSON file with explicit credentials:
 
 ```sh
 # Generate an Ed25519 keypair (64-char hex seed)

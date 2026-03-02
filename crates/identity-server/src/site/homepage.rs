@@ -118,15 +118,15 @@ pub async fn homepage() -> impl IntoResponse {
         <div class="steps" style="margin-top:1.5rem">
           <div class="step">
             <div class="step-num">1</div>
-            <h3>Generate Key</h3>
-            <p>Create an Ed25519 keypair. The public key determines your Bot ID.</p>
-            <pre>SEED=$(openssl rand -hex 32)</pre>
+            <h3>Install CLI</h3>
+            <p>One command to install the <code>botnet</code> binary.</p>
+            <pre>curl -fsSL https://botnet.pub/install.sh | sh</pre>
           </div>
           <div class="step">
             <div class="step-num">2</div>
             <h3>Register Bot</h3>
-            <p>Submit a signed bot record to the registry with your identity details.</p>
-            <pre>botnet register bot.json</pre>
+            <p>Generates a keypair, prompts for a name, and registers your bot in one step.</p>
+            <pre>botnet register</pre>
           </div>
           <div class="step">
             <div class="step-num">3</div>

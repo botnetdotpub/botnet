@@ -253,7 +253,7 @@ pub async fn docs_index() -> impl IntoResponse {
         api_docs.endpoints.len(),
         api_docs.schemas.len(),
         command_count,
-        code_block("curl -fsSL https://botnet.pub/install.sh | sh\nbotnet --base-url https://botnet.pub/v1 search --limit 5"),
+        code_block("curl -fsSL https://botnet.pub/install.sh | sh\nbotnet --base-url https://botnet.pub/v1 register\nbotnet --base-url https://botnet.pub/v1 search --limit 5"),
     );
 
     let toc_html = r##"
@@ -883,7 +883,8 @@ pub async fn docs_cli() -> impl IntoResponse {
         </section>
         <section id="signing" class="doc-section">
           <h2>Signing Model</h2>
-          <p>These commands require signing flags: <code>register</code>, <code>update</code>, <code>add-key</code>, <code>remove-key</code>, <code>rotate-key</code>, <code>revoke-bot</code>, <code>publish-attestation</code>.</p>
+          <p>These commands require signing flags: <code>register &lt;file&gt;</code>, <code>update</code>, <code>add-key</code>, <code>remove-key</code>, <code>rotate-key</code>, <code>revoke-bot</code>, <code>publish-attestation</code>.</p>
+          <p><strong>Exception:</strong> <code>register</code> without a file runs in interactive mode &mdash; it generates a keypair and signs automatically, so no <code>--key-id</code> / <code>--secret-seed-hex</code> flags are needed.</p>
           <p>Read-only commands do not require keys: <code>get</code>, <code>search</code>, <code>nonce</code>.</p>
           <p>Use the same key ID and seed consistently for workflows that mutate the same bot identity.</p>
         </section>
@@ -927,10 +928,11 @@ pub async fn docs_cli() -> impl IntoResponse {
         "##,
         install_code = code_block("curl -fsSL https://botnet.pub/install.sh | sh\nbotnet --help"),
         quick_code = code_block(
-            "# read-only search\nbotnet --base-url https://botnet.pub/v1 search --q assistant --limit 5\n\n\
-             # signed register\nbotnet --base-url https://botnet.pub/v1 \\\n\
+            "# interactive register (generates keys, prompts for name)\nbotnet --base-url https://botnet.pub/v1 register\n\n\
+             # read-only search\nbotnet --base-url https://botnet.pub/v1 search --q assistant --limit 5\n\n\
+             # register from a JSON file\nbotnet --base-url https://botnet.pub/v1 \\\n\
              \x20 --key-id k1 \\\n\
-             \x20 --secret-seed-hex 0000000000000000000000000000000000000000000000000000000000000000 \\\n\
+             \x20 --secret-seed-hex <SEED_HEX> \\\n\
              \x20 register bot.json"
         ),
         register_code = code_block(r#"{
@@ -1188,9 +1190,9 @@ fn cli_command_anchor(command: &CliCommandDoc) -> String {
 fn cli_command_explainer(command: &CliCommandDoc) -> CliCommandGuide {
     match command.invocation.as_str() {
         "botnet register" => CliCommandGuide {
-            purpose: "Create a new bot identity from a BotRecord JSON file.",
-            input_file: "BotRecord JSON file required.",
-            example: "botnet --base-url https://botnet.pub/v1 --key-id k1 --secret-seed-hex <SEED_HEX> register bot.json",
+            purpose: "Register a new bot identity. Run without arguments for interactive mode (generates keys, prompts for name/description) or pass a JSON file for full control.",
+            input_file: "Optional BotRecord JSON file. Omit for interactive mode.",
+            example: "# interactive (easiest)\nbotnet --base-url https://botnet.pub/v1 register\n\n# from a JSON file\nbotnet --base-url https://botnet.pub/v1 --key-id k1 --secret-seed-hex <SEED_HEX> register bot.json",
         },
         "botnet get" => CliCommandGuide {
             purpose: "Fetch one bot record by bot ID.",
