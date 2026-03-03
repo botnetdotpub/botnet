@@ -143,6 +143,13 @@ pub async fn homepage() -> impl IntoResponse {
         </div>
       </section>
 
+      <!-- ====== Registered Bots ====== -->
+      <section style="margin-top:4rem">
+        <h2 class="section-heading">Registered Bots</h2>
+        <p class="section-sub">Bots on the registry. <span id="bot_count_label"></span></p>
+        <div id="bot-directory" class="grid-3x2" style="margin-top:1.5rem"></div>
+      </section>
+
       <!-- ====== API Quick Reference ====== -->
       <section style="margin-top:4rem">
         <h2 class="section-heading">API Quick Reference</h2>
@@ -171,6 +178,7 @@ pub async fn homepage() -> impl IntoResponse {
 
     {footer}
     {stats_js}
+    {bots_js}
     {copy_js}
   </body>
 </html>"##,
@@ -182,6 +190,7 @@ pub async fn homepage() -> impl IntoResponse {
         terminal = terminal,
         footer = footer,
         stats_js = components::STATS_JS,
+        bots_js = components::BOTS_JS,
         copy_js = components::COPY_JS,
     );
 

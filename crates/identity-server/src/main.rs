@@ -289,6 +289,7 @@ fn app_router(state: AppState) -> Router {
         .route("/docs/cli", get(site::docs_cli))
         .route("/openapi.json", get(site::openapi_json))
         .route("/swagger", get(site::swagger))
+        .route("/bots/{bot_id}", get(site::bot_profile))
         .route("/health", get(health))
         .route("/v1", get(api_root))
         .route("/v1/stats", get(registry_stats))

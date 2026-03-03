@@ -381,6 +381,32 @@ pub const HOMEPAGE_CSS: &str = r#"
         font-size: 0.8rem;
       }
 
+      /* ---- Bot directory cards ---- */
+      .bot-card {
+        text-decoration: none;
+        display: block;
+      }
+      .bot-card h3 {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .bot-card p {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .bot-card-meta {
+        display: flex;
+        gap: 0.8rem;
+        font-size: 0.78rem;
+        color: var(--mono);
+        font-family: "IBM Plex Mono", monospace;
+        margin-top: 0.4rem;
+      }
+      .bot-revoked { color: var(--red); }
+      .bot-deprecated { color: var(--orange); }
+
       /* ---- Responsive ---- */
       @media (max-width: 1024px) {
         .hero { grid-template-columns: 1fr; }
@@ -395,6 +421,391 @@ pub const HOMEPAGE_CSS: &str = r#"
         .steps { grid-template-columns: 1fr; }
         .footer-grid { grid-template-columns: 1fr; gap: 1.5rem; }
         .hero h1 { font-size: 2.2rem; }
+      }
+"#;
+
+/// Bot profile page CSS.
+pub const PROFILE_CSS: &str = r#"
+      body {
+        font-family: "Space Grotesk", "Manrope", "Avenir Next", "Segoe UI", sans-serif;
+        background: var(--bg);
+      }
+
+      /* ---- Nav (reused from homepage) ---- */
+      .nav {
+        position: sticky; top: 0; z-index: 50;
+        display: flex; align-items: center; justify-content: space-between;
+        max-width: 900px; margin: 0 auto;
+        padding: 0.85rem 1.2rem;
+        background: rgba(6, 8, 13, 0.8);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--line);
+      }
+      .brand {
+        color: #f8fafc;
+        font-size: 1.05rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-decoration: none;
+      }
+      .brand span {
+        color: var(--mono);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 0.9rem;
+        margin-right: 0.4rem;
+      }
+      .nav-links {
+        display: flex; align-items: center; gap: 0.3rem;
+      }
+      .nav-links a {
+        text-decoration: none;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 0.78rem;
+        color: var(--muted);
+        padding: 0.45rem 0.7rem;
+        border-radius: 8px;
+        transition: color 0.15s, background 0.15s;
+      }
+      .nav-links a:hover { color: #f8fafc; background: rgba(255,255,255,0.04); }
+      .github-btn {
+        border: 1px solid var(--line-2);
+        border-radius: 8px;
+        display: inline-flex; align-items: center; gap: 0.35rem;
+      }
+      .github-btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+      /* ---- Page container ---- */
+      .page { max-width: 900px; margin: 0 auto; padding: 0 1.2rem; }
+
+      /* ---- Profile header ---- */
+      .profile-header {
+        margin-top: 2rem;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--card);
+        padding: 1.5rem 1.5rem 1.2rem;
+      }
+      .profile-header h1 {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: #f1f5f9;
+        margin-bottom: 0.5rem;
+        letter-spacing: -0.02em;
+      }
+      .bot-id-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+      }
+      .bot-id-row code {
+        font-size: 0.82rem;
+        color: var(--muted);
+        word-break: break-all;
+      }
+      .copy-btn {
+        background: none; border: 1px solid var(--line-2); border-radius: 6px;
+        color: var(--muted); cursor: pointer; padding: 0.3rem 0.5rem;
+        font-size: 0.7rem; font-family: "IBM Plex Mono", monospace;
+        transition: all 0.15s; flex-shrink: 0;
+      }
+      .copy-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+      .profile-description {
+        color: var(--muted);
+        font-size: 0.95rem;
+        line-height: 1.6;
+        margin-bottom: 0.75rem;
+      }
+      .meta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        font-size: 0.82rem;
+        color: var(--mono);
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--line);
+      }
+      .meta-row span { display: inline-flex; align-items: center; gap: 0.3rem; }
+      .meta-row strong { color: var(--muted); font-weight: 500; }
+
+      /* ---- Status badges ---- */
+      .status-badge {
+        display: inline-block;
+        padding: 0.2rem 0.6rem;
+        border-radius: 6px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        font-family: "IBM Plex Mono", monospace;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+      .status-active {
+        background: rgba(34, 197, 94, 0.12);
+        border: 1px solid rgba(34, 197, 94, 0.3);
+        color: var(--green);
+      }
+      .status-deprecated {
+        background: rgba(249, 115, 22, 0.12);
+        border: 1px solid rgba(249, 115, 22, 0.3);
+        color: var(--orange);
+      }
+      .status-revoked {
+        background: rgba(251, 113, 133, 0.12);
+        border: 1px solid rgba(251, 113, 133, 0.3);
+        color: var(--red);
+      }
+
+      /* ---- Profile sections ---- */
+      .profile-section {
+        margin-top: 1.2rem;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--card);
+        padding: 1.2rem 1.3rem;
+      }
+      .profile-section h2 {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #f1f5f9;
+        margin-bottom: 0.8rem;
+        letter-spacing: -0.01em;
+      }
+
+      /* ---- Key cards ---- */
+      .key-card {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 1rem;
+        background: rgba(8, 12, 20, 0.5);
+        margin-bottom: 0.6rem;
+      }
+      .key-card:last-child { margin-bottom: 0; }
+      .key-card-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.5rem;
+      }
+      .key-card-header code {
+        font-size: 0.88rem;
+        color: #f1f5f9;
+        font-weight: 500;
+      }
+      .key-tag {
+        display: inline-block;
+        padding: 0.15rem 0.45rem;
+        border-radius: 5px;
+        font-size: 0.68rem;
+        font-weight: 600;
+        font-family: "IBM Plex Mono", monospace;
+        letter-spacing: 0.03em;
+      }
+      .key-tag-algo {
+        background: rgba(96, 165, 250, 0.12);
+        border: 1px solid rgba(96, 165, 250, 0.25);
+        color: var(--blue);
+      }
+      .key-tag-primary {
+        background: rgba(34, 211, 238, 0.12);
+        border: 1px solid rgba(34, 211, 238, 0.25);
+        color: var(--cyan);
+      }
+      .key-tag-revoked {
+        background: rgba(251, 113, 133, 0.12);
+        border: 1px solid rgba(251, 113, 133, 0.25);
+        color: var(--red);
+      }
+      .key-multibase {
+        font-size: 0.78rem;
+        color: var(--mono);
+        word-break: break-all;
+        line-height: 1.5;
+        margin-top: 0.3rem;
+      }
+      .key-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.8rem;
+        font-size: 0.78rem;
+        color: var(--mono);
+        margin-top: 0.5rem;
+      }
+
+      /* ---- Capability tags ---- */
+      .cap-tag {
+        display: inline-block;
+        padding: 0.25rem 0.6rem;
+        border-radius: 6px;
+        font-size: 0.78rem;
+        font-family: "IBM Plex Mono", monospace;
+        background: rgba(167, 139, 250, 0.1);
+        border: 1px solid rgba(167, 139, 250, 0.25);
+        color: var(--purple);
+        margin: 0.2rem;
+      }
+
+      /* ---- Tables ---- */
+      .profile-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+      }
+      .profile-table th, .profile-table td {
+        padding: 0.55rem 0.7rem;
+        text-align: left;
+        border-bottom: 1px solid var(--line);
+      }
+      .profile-table th {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 0.72rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--mono);
+        background: rgba(14,19,29,0.6);
+      }
+      .profile-table tr:hover td { background: rgba(255,255,255,0.02); }
+      .profile-table code {
+        font-size: 0.82rem;
+        padding: 0.15rem 0.4rem;
+        border-radius: 4px;
+        background: rgba(255,255,255,0.04);
+      }
+
+      /* ---- Bot link ---- */
+      .bot-link {
+        color: var(--cyan);
+        text-decoration: none;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 0.82rem;
+      }
+      .bot-link:hover { text-decoration: underline; }
+
+      /* ---- Owner info ---- */
+      .owner-grid {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.3rem 1rem;
+        font-size: 0.88rem;
+      }
+      .owner-grid dt {
+        color: var(--mono);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding-top: 0.1rem;
+      }
+      .owner-grid dd { color: var(--text); }
+
+      /* ---- Raw JSON ---- */
+      .raw-json details {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .raw-json summary {
+        cursor: pointer;
+        padding: 0.6rem 1rem;
+        font-size: 0.82rem;
+        font-family: "IBM Plex Mono", monospace;
+        color: var(--muted);
+        background: rgba(14,19,29,0.5);
+        user-select: none;
+        transition: color 0.15s;
+      }
+      .raw-json summary:hover { color: #f1f5f9; }
+      .raw-json pre {
+        margin: 0;
+        padding: 1rem;
+        background: #080c14;
+        color: #e8eef8;
+        font-size: 0.78rem;
+        line-height: 1.55;
+        overflow-x: auto;
+        max-height: 500px;
+        overflow-y: auto;
+      }
+      .raw-json .api-link {
+        display: inline-block;
+        margin-top: 0.5rem;
+        color: var(--cyan);
+        text-decoration: none;
+        font-size: 0.82rem;
+        font-family: "IBM Plex Mono", monospace;
+      }
+      .raw-json .api-link:hover { text-decoration: underline; }
+
+      /* ---- Not found ---- */
+      .not-found {
+        margin-top: 4rem;
+        text-align: center;
+      }
+      .not-found h1 {
+        font-size: 4rem;
+        font-weight: 700;
+        color: var(--line-2);
+        margin-bottom: 0.5rem;
+      }
+      .not-found p {
+        color: var(--muted);
+        font-size: 1rem;
+        margin-bottom: 1.5rem;
+      }
+      .not-found code {
+        font-size: 0.85rem;
+        color: var(--mono);
+        word-break: break-all;
+      }
+
+      /* ---- Footer ---- */
+      .footer {
+        margin-top: 4rem;
+        border-top: 1px solid var(--line);
+        padding: 3rem 0 2rem;
+      }
+      .footer-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2rem;
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 0 1.2rem;
+      }
+      .footer-col h4 {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 0.72rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--mono);
+        margin-bottom: 0.8rem;
+      }
+      .footer-col a {
+        display: block;
+        text-decoration: none;
+        color: var(--muted);
+        font-size: 0.88rem;
+        padding: 0.25rem 0;
+        transition: color 0.15s;
+      }
+      .footer-col a:hover { color: #f8fafc; }
+      .footer-bottom {
+        max-width: 900px;
+        margin: 2rem auto 0;
+        padding: 1.2rem 1.2rem 0;
+        border-top: 1px solid var(--line);
+        display: flex; justify-content: space-between; align-items: center;
+        color: var(--mono);
+        font-size: 0.8rem;
+      }
+
+      /* ---- Responsive ---- */
+      @media (max-width: 768px) {
+        .nav-links a:not(.github-btn) { display: none; }
+        .profile-header h1 { font-size: 1.4rem; }
+        .meta-row { flex-direction: column; gap: 0.4rem; }
+        .owner-grid { grid-template-columns: 1fr; }
+        .footer-grid { grid-template-columns: 1fr; gap: 1.5rem; }
       }
 "#;
 

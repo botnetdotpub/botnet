@@ -154,6 +154,47 @@ pub const STATS_JS: &str = r#"
       setInterval(refresh, 15000);
     </script>"#;
 
+/// JavaScript for loading bot directory on homepage.
+pub const BOTS_JS: &str = r#"
+    <script>
+    (function() {
+      var grid = document.getElementById('bot-directory');
+      var label = document.getElementById('bot_count_label');
+      if (!grid) return;
+      fetch('/v1/search?limit=50')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var bots = data.results || [];
+          if (label && data.count) {
+            label.textContent = bots.length + ' of ' + data.count + ' total';
+          }
+          if (!bots.length) {
+            grid.innerHTML = '<p style="color:var(--muted)">No bots registered yet.</p>';
+            return;
+          }
+          grid.innerHTML = bots.map(function(b) {
+            var name = b.display_name || 'Unnamed';
+            var esc = function(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
+            var statusClass = b.status === 'active' ? 'good' : (b.status === 'revoked' ? 'bot-revoked' : 'bot-deprecated');
+            var desc = b.description ? '<p>' + esc(b.description) + '</p>' : '';
+            var keys = b.public_keys ? b.public_keys.length : 0;
+            var atts = b.attestations ? b.attestations.length : 0;
+            return '<a href="/bots/' + encodeURIComponent(b.bot_id) + '" class="card bot-card">'
+              + '<h3>' + esc(name) + ' <span class="' + statusClass + '" style="font-size:0.7rem;font-weight:600;font-family:\'IBM Plex Mono\',monospace">' + esc(b.status) + '</span></h3>'
+              + desc
+              + '<div class="bot-card-meta">'
+              + '<span>' + keys + ' key' + (keys !== 1 ? 's' : '') + '</span>'
+              + '<span>' + atts + ' attestation' + (atts !== 1 ? 's' : '') + '</span>'
+              + '</div>'
+              + '</a>';
+          }).join('');
+        })
+        .catch(function() {
+          grid.innerHTML = '<p style="color:var(--muted)">Could not load bots.</p>';
+        });
+    })();
+    </script>"#;
+
 /// JavaScript for TOC active section tracking in docs.
 pub const TOC_JS: &str = r#"
     <script>
